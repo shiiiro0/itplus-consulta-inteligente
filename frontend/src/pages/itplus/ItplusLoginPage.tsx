@@ -9,7 +9,7 @@ import { useItplusAuth } from '../../contexts/ItplusAuthContext'
 export default function ItplusLoginPage() {
   const { login } = useItplusAuth()
   const navigate = useNavigate()
-  const [email, setEmail] = useState('admin@itplus.cl')
+  const [email, setEmail] = useState('admin')
   const [password, setPassword] = useState('admin123')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -54,8 +54,10 @@ export default function ItplusLoginPage() {
         <Box component="form" onSubmit={handleSubmit}>
           <TextField
             fullWidth
-            label="Correo electrónico"
-            type="email"
+            label="Usuario o correo"
+            type="text"
+            autoComplete="username"
+            placeholder="admin o admin@itplus.cl"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             margin="normal"

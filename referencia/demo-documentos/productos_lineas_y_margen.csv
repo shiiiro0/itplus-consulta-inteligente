@@ -1,0 +1,8 @@
+producto;familia;precio_lista_clp;costo_clp;margen_pct;stock_unidades;tendencia_trimestre
+Monitor 27";PTP;500000;380000;24.0;142;creciente
+Notebook Pro 15;PTP;1500000;1180000;21.3;67;estable
+Teclado mecánico;PFD;30000;19500;35.0;890;creciente
+Mouse inalámbrico;PFD;15000;9000;40.0;1200;estable
+Servidor Rack 2U;PSA;8000000;6400000;20.0;12;decreciente
+Switch 48 puertos;PSA;1500000;1120000;25.3;34;creciente
+Impresora láser A3;PTB;2200000;1700000;22.7;28;decreciente

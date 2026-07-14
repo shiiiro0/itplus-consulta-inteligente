@@ -5,6 +5,80 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ITPlus — Consulta Inteligente</title>
+    <!-- Fuentes opcionales: no bloquean la app si fallan en LAN móvil -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      />
+    </noscript>
+    <style>
+      #root:empty::before {
+        content: 'Cargando ITPlus…';
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        margin: 0;
+        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+        font-size: 1rem;
+        color: #647089;
+        background: #f3f6fb;
+      }
+      #root.boot-error {
+        padding: 1.5rem;
+        font-family: system-ui, sans-serif;
+        color: #16243a;
+        background: #f3f6fb;
+        min-height: 100vh;
+        line-height: 1.5;
+      }
+      #root.boot-error a {
+        color: #3b7dd8;
+      }
+    </style>
+    <script>
+      (function () {
+        var root = document.getElementById('root')
+        function showBootError(title, detail) {
+          if (!root || root.childNodes.length) return
+          root.className = 'boot-error'
+          root.innerHTML =
+            '<h2 style="margin:0 0 .75rem;font-size:1.1rem">' +
+            title +
+            '</h2><p style="margin:0 0 1rem;color:#647089">' +
+            detail +
+            '</p><p style="margin:0"><a href="/mobile-check.html">Abrir diagnóstico móvil</a></p>'
+        }
+        window.addEventListener(
+          'error',
+          function (e) {
+            showBootError('Error al cargar la app', e.message || 'Error desconocido')
+          },
+          true,
+        )
+        window.addEventListener('unhandledrejection', function (e) {
+          var msg = e.reason && (e.reason.message || String(e.reason))
+          showBootError('Error al iniciar', msg || 'Fallo inesperado')
+        })
+        setTimeout(function () {
+          if (root && !root.childNodes.length) {
+            showBootError(
+              'La app no terminó de cargar',
+              'El archivo JavaScript (~400 KB comprimido) no llegó al teléfono. Prueba el diagnóstico o abre el puerto 3000 en el firewall de Windows.',
+            )
+          }
+        }, 25000)
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

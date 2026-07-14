@@ -1,0 +1,40 @@
+:root {
+  --navy-900: #0d1e33;
+  --navy-800: #122a47;
+  --navy-700: #1a3a5c;
+  --navy-600: #234a72;
+  --brand-blue: #3b7dd8;
+  --brand-blue-light: #6ea3e8;
+  --bg-app: #f3f6fb;
+  --surface: #ffffff;
+  --accent-amber: #f5b942;
+  --accent-amber-bg: #fef6e3;
+  --accent-green: #2fbf8f;
+  --accent-green-bg: #e5f9f1;
+  --accent-blue-bg: #e8f0fc;
+  --accent-coral: #ff6a5f;
+  --accent-coral-bg: #ffe9e7;
+  --ink: #16243a;
+  --muted: #647089;
+  --muted-light: #9aa5ba;
+  --border: #e3e8f1;
+  --radius-lg: 20px;
+  --radius-md: 14px;
+  --radius-sm: 10px;
+  --shadow-card: 0 1px 2px rgba(16, 36, 64, 0.04), 0 8px 24px rgba(16, 36, 64, 0.06);
+  --shadow-pop: 0 12px 40px rgba(13, 30, 51, 0.18);
+  --font-display: 'Sora', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', monospace;
+}
+
+.itplus-icon {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}

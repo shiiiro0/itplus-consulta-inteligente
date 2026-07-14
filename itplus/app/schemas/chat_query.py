@@ -9,14 +9,17 @@ class SourceCitation(BaseModel):
     document_name: str
     excerpt: str
     page: int | None = None
+    sheet: str | None = None
     score: float
 
 
 class QueryRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=4000)
+    category: str | None = Field(default="general", description="Filtro de categoría documental")
 
 
 class QueryResponse(BaseModel):
+    id: UUID | None = None
     answer: str
     sources: list[SourceCitation]
 

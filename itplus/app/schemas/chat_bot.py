@@ -3,16 +3,25 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from itplus.app.schemas.chat_query import SourceCitation
+
 
 class BotMessageRequest(BaseModel):
     conversation_id: UUID | None = None
     message: str = Field(..., min_length=1, max_length=8000)
+    category: str | None = Field(
+        default="soporte",
+        description="Categoría documental: soporte, politicas, operaciones o general",
+    )
 
 
 class BotMessageResponse(BaseModel):
     conversation_id: UUID
     response: str
     is_finished: bool
+    sources: list[SourceCitation] = Field(default_factory=list)
+    ticket_reference: str | None = None
+    escalated: bool = False
 
 
 class CreateConversationRequest(BaseModel):
@@ -25,6 +34,7 @@ class ConversationResponse(BaseModel):
     status: str
     context_type: str | None
     context_id: str | None
+    ticket_reference: str | None = None
     created_at: datetime
     finished_at: datetime | None
 
@@ -36,6 +46,7 @@ class MessageResponse(BaseModel):
     role: str
     content: str
     created_at: datetime
+    sources: list[SourceCitation] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 

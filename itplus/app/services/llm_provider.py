@@ -57,6 +57,30 @@ class LLMProvider:
             logger.error("LLM completion failed (driver=%s): %s", self.settings.ai_driver, exc)
             raise
 
+    def chat_completion_stream(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        model: str | None = None,
+    ):
+        temperature = temperature if temperature is not None else self.settings.ai_temperature
+        max_tokens = max_tokens if max_tokens is not None else self.settings.ai_max_tokens
+        model = model or self.settings.ai_model
+
+        stream = self.client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=True,
+        )
+        for chunk in stream:
+            delta = chunk.choices[0].delta.content
+            if delta:
+                yield delta
+
     def get_model_name(self) -> str:
         return self.settings.ai_model
 

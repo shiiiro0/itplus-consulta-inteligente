@@ -20,4 +20,8 @@ celery_app.conf.update(
     enable_utc=True,
     task_track_started=True,
     worker_prefetch_multiplier=1,
+    include=["itplus.app.workers.index_document"],
 )
+
+# Ensure task modules are imported so @celery_app.task decorators register.
+import itplus.app.workers.index_document  # noqa: F401, E402

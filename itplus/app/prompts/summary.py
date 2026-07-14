@@ -19,6 +19,12 @@ A partir del historial de conversación proporcionado, genera un resumen técnic
 ## Nivel de urgencia
 [Bajo / Medio / Alto — con breve justificación basada en lo reportado]
 
+## Ticket / escalamiento
+[Indica si el caso quedó resuelto en chat o requiere seguimiento humano. Si hubo ticket, menciónalo.]
+
+## Pasos intentados / solución aplicada
+[Pasos de resolución propuestos o confirmados por el usuario, si los hubo]
+
 ## Reglas
 - NO inventes información que no esté en la conversación.
 - Usa lenguaje técnico apropiado para un equipo de soporte.

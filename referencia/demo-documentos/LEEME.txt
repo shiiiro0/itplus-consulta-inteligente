@@ -1,0 +1,28 @@
+DOCUMENTOS DE PRUEBA — ITPlus Consulta Inteligente
+================================================
+
+Sube estos archivos en: Documentos (http://localhost:3000/documentos)
+Espera estado "Listo" antes de preguntar en el Asistente.
+
+ARCHIVO                              | CATEGORÍA SUGERIDA | PARA PROBAR
+-------------------------------------|--------------------|----------------------------------
+ventas_enero_marzo_2025.csv          | ventas             | Comparativo año anterior
+ventas_enero_marzo_2026.csv          | ventas             | Ventas actuales, vendedores
+vendedores_metas_q1_2026.csv         | ventas             | Cumplimiento de metas
+productos_lineas_y_margen.csv        | productos          | Producto X, familias, márgenes
+quiebres_abril_2026.csv              | operaciones        | Quiebres por tipo (más datos)
+politica_garantias_y_devoluciones.md | politicas          | Preguntas de política (sin números)
+procedimiento_cierre_ventas.txt      | politicas          | Procesos internos
+reporte_financiero_q1_2026.xlsx      | finanzas           | Soporte nativo Excel (.xlsx)
+
+PREGUNTAS SUGERIDAS EN EL ASISTENTE
+-----------------------------------
+• Compara las ventas de enero a marzo 2026 vs el mismo período de 2025
+• ¿Cómo va el vendedor Tomás Rojas en el primer trimestre?
+• ¿Cuál es la curva o tendencia del producto Monitor 27" según los reportes?
+• ¿Qué vendedor cumplió mejor su meta en Q1?
+• ¿Cuántos quiebres WMS vs SAP hay en el reporte de abril?
+• ¿Cuál es el plazo de garantía para productos electrónicos?
+• Resume el estado financiero del primer trimestre
+
+NOTA: Los datos son ficticios solo para pruebas internas ITPlus.

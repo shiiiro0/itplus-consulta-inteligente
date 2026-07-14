@@ -1,22 +1,32 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
-import { clearAuth, getMe, getStoredUser, getToken, login as apiLogin, setAuth } from '../api/client'
+import { getMe, login as apiLogin, loginAzure as apiLoginAzure } from '../api/auth'
+import { clearAuth, getStoredUser, getToken, setAuth } from '../api/client'
+import { azureLogout } from '../auth/msalConfig'
 
-interface User {
+interface UserInfo {
+  username: string
   email: string
-  role: string
+  rol: string
+  permisos: string[]
+  nombre?: string
 }
 
 interface AuthContextValue {
-  user: User | null
+  user: UserInfo | null
   isLoading: boolean
-  login: (email: string, password: string) => Promise<void>
+  login: (username: string, password: string) => Promise<void>
+  loginWithAzure: (token: string) => Promise<void>
   logout: () => void
+  isAdmin: boolean
+  can: (modulo: string) => boolean
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
+const ADMIN_ONLY_FALLBACK = ['usuarios', 'roles', 'sesiones']
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUser] = useState<UserInfo | null>(null)
   const [isLoading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -26,10 +36,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false)
       return
     }
-    setUser(stored)
+    setUser({ ...stored, permisos: stored.permisos ?? [] })
     getMe()
       .then((me) => {
-        const info = { email: me.email, role: me.role }
+        const info: UserInfo = {
+          username: me.username,
+          email: me.email,
+          nombre: me.nombre,
+          rol: me.rol,
+          permisos: me.permisos ?? [],
+        }
         setAuth(token, info)
         setUser(info)
       })
@@ -37,22 +53,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .finally(() => setLoading(false))
   }, [])
 
-  const login = useCallback(async (email: string, password: string) => {
-    const resp = await apiLogin(email, password)
-    setAuth(resp.access_token, { email, role: 'user' })
-    const me = await getMe()
-    const info = { email: me.email, role: me.role }
-    setAuth(resp.access_token, info)
+  const persist = (info: UserInfo, token: string) => {
+    setAuth(token, info)
     setUser(info)
+  }
+
+  const login = useCallback(async (username: string, password: string) => {
+    const resp = await apiLogin(username, password)
+    persist(
+      {
+        username: resp.username,
+        email: resp.email,
+        rol: resp.rol,
+        permisos: resp.permisos ?? [],
+      },
+      resp.access_token,
+    )
+  }, [])
+
+  const loginWithAzure = useCallback(async (token: string) => {
+    const resp = await apiLoginAzure(token)
+    persist(
+      {
+        username: resp.username,
+        email: resp.email,
+        rol: resp.rol,
+        permisos: resp.permisos ?? [],
+      },
+      resp.access_token,
+    )
   }, [])
 
   const logout = useCallback(() => {
     clearAuth()
     setUser(null)
+    void azureLogout()
   }, [])
 
+  const isAdmin = (user?.rol ?? '').trim().toLowerCase() === 'administrador'
+
+  const can = useCallback(
+    (modulo: string): boolean => {
+      if (isAdmin) return true
+      const permisos = user?.permisos ?? []
+      if (permisos.length > 0) return permisos.includes(modulo)
+      return !ADMIN_ONLY_FALLBACK.includes(modulo)
+    },
+    [isAdmin, user],
+  )
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+    <AuthContext.Provider
+      value={{ user, isLoading, login, loginWithAzure, logout, isAdmin, can }}
+    >
       {children}
     </AuthContext.Provider>
   )

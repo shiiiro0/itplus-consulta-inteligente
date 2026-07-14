@@ -2,24 +2,54 @@
 
 import sys
 
+from sqlalchemy import select
+
 from itplus.app.core.database import SessionLocal, init_db
 from itplus.app.core.security import get_password_hash
 from itplus.app.models.user import User
+from itplus.app.services.rbac import ADMIN_ROLE, get_role_by_name
 
 
-def seed_admin(email: str = "admin@itplus.cl", password: str = "admin123") -> None:
+def seed_admin(
+    email: str = "admin@itplus.cl",
+    password: str = "admin123",
+    username: str = "admin",
+    nombre: str = "Administrador ITPlus",
+) -> None:
     init_db()
     db = SessionLocal()
     try:
-        existing = db.query(User).filter(User.email == email).first()
+        admin_role = get_role_by_name(db, ADMIN_ROLE)
+        existing = db.scalar(
+            select(User).where((User.email == email) | (User.username == username))
+        )
         if existing:
-            print(f"User {email} already exists")
+            changed = False
+            if admin_role and existing.role_id != admin_role.id:
+                existing.role_id = admin_role.id
+                existing.role = ADMIN_ROLE
+                changed = True
+            if not existing.username:
+                existing.username = username
+                changed = True
+            if not existing.nombre:
+                existing.nombre = nombre
+                changed = True
+            if changed:
+                db.commit()
+                print(f"Updated admin user: {email}")
+            else:
+                print(f"User {email} already exists")
             return
 
         user = User(
+            username=username,
             email=email,
+            nombre=nombre,
             password_hash=get_password_hash(password),
-            role="admin",
+            role=ADMIN_ROLE,
+            role_id=admin_role.id if admin_role else None,
+            activo=True,
         )
         db.add(user)
         db.commit()

@@ -43,3 +43,10 @@ class EmbeddingService:
 
 
 embedding_service = EmbeddingService()
+
+
+def warmup_embedding_model() -> None:
+    """Load SentenceTransformer once at startup to avoid cold-start on first chat."""
+    logger.info("Preloading embedding model for faster first response...")
+    embedding_service.embed_text("warmup")
+    logger.info("Embedding model ready")

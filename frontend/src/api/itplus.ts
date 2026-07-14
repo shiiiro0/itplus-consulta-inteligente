@@ -91,8 +91,8 @@ export interface DocumentItem {
   indexed_at: string | null
 }
 
-export async function itplusLogin(email: string, password: string) {
-  const { data } = await itplusClient.post('/auth/login', { email, password })
+export async function itplusLogin(login: string, password: string) {
+  const { data } = await itplusClient.post('/auth/login', { username: login, password })
   return data as { access_token: string; token_type: string }
 }
 

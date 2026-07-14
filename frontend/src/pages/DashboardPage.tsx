@@ -1,91 +1,192 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Box, Card, CardActionArea, CardContent, Grid, Typography, Chip,
-} from '@mui/material'
-import SmartToyIcon from '@mui/icons-material/SmartToy'
-import SearchIcon from '@mui/icons-material/Search'
-import FolderIcon from '@mui/icons-material/Folder'
-import { getHealth, listDocuments } from '../api/client'
+  getAssistantRoadmap,
+  getChatHistory,
+  getHealth,
+  listDocuments,
+} from '../api/client'
+import { useAuth } from '../contexts/AuthContext'
+import {
+  BriefcaseIcon,
+  ChevronRightIcon,
+  FolderIcon,
+  RobotIcon,
+  SearchIcon,
+} from '../components/ItplusIcons'
+
+interface FeatureCard {
+  title: string
+  desc: string
+  path: string
+  icon: React.ReactNode
+  colorClass: string
+  iconClass: string
+  modulo: string
+}
+
+const FEATURE_CARDS: FeatureCard[] = [
+  {
+    title: 'Asistente Gerencial',
+    desc: 'Conversa con la IA sobre reportes y documentos de la empresa.',
+    path: '/asistente',
+    icon: <BriefcaseIcon />,
+    colorClass: 'blue-b',
+    iconClass: 'blue',
+    modulo: 'asistente',
+  },
+  {
+    title: 'Base de conocimiento',
+    desc: 'Sube reportes de ventas, productos y políticas para el asistente.',
+    path: '/documentos',
+    icon: <FolderIcon />,
+    colorClass: 'amber-b',
+    iconClass: 'amber',
+    modulo: 'documentos',
+  },
+  {
+    title: 'ITPlusBot',
+    desc: 'Soporte técnico con base de conocimiento y resolución guiada (ITIL).',
+    path: '/bot',
+    icon: <RobotIcon />,
+    colorClass: 'coral-b',
+    iconClass: 'coral',
+    modulo: 'bot',
+  },
+  {
+    title: 'Consulta RAG',
+    desc: 'Preguntas puntuales sobre documentos con citas.',
+    path: '/consulta',
+    icon: <SearchIcon />,
+    colorClass: 'green-b',
+    iconClass: 'green',
+    modulo: 'consulta',
+  },
+]
 
 export default function DashboardPage() {
   const navigate = useNavigate()
+  const { can } = useAuth()
+  const [loading, setLoading] = useState(true)
+  const [entering, setEntering] = useState(true)
   const [health, setHealth] = useState<Record<string, unknown> | null>(null)
+  const [phase, setPhase] = useState(1)
   const [docStats, setDocStats] = useState({ total: 0, ready: 0 })
+  const [chatCount, setChatCount] = useState(0)
 
   useEffect(() => {
-    getHealth().then(setHealth).catch(() => setHealth(null))
-    listDocuments()
-      .then((docs) => {
-        setDocStats({
-          total: docs.length,
-          ready: docs.filter((d) => d.status === 'ready').length,
-        })
+    let cancelled = false
+
+    Promise.all([
+      getHealth().catch(() => null),
+      getAssistantRoadmap().catch(() => ({ current_phase: 1 })),
+      listDocuments().catch(() => []),
+      getChatHistory().catch(() => ({ items: [], total: 0 })),
+    ]).then(([healthRes, roadmap, docs, history]) => {
+      if (cancelled) return
+      setHealth(healthRes)
+      setPhase(roadmap.current_phase)
+      setDocStats({
+        total: docs.length,
+        ready: docs.filter((d) => d.status === 'ready').length,
       })
-      .catch(() => {})
+      setChatCount(history.total || history.items.length)
+      setLoading(false)
+    })
+
+    const timer = window.setTimeout(() => setEntering(false), 900)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
   }, [])
 
-  const cards = [
-    {
-      title: 'ITPlusBot',
-      desc: 'Asistente conversacional para describir problemas técnicos',
-      icon: <SmartToyIcon sx={{ fontSize: 40, color: '#2d6a9f' }} />,
-      path: '/bot',
-      color: '#e8f4fd',
-    },
-    {
-      title: 'Consulta Inteligente',
-      desc: 'Preguntas sobre documentos con citas y trazabilidad',
-      icon: <SearchIcon sx={{ fontSize: 40, color: '#38a169' }} />,
-      path: '/consulta',
-      color: '#e6ffed',
-    },
-    {
-      title: 'Documentos',
-      desc: 'Subir y administrar la base de conocimiento',
-      icon: <FolderIcon sx={{ fontSize: 40, color: '#d69e2e' }} />,
-      path: '/documentos',
-      color: '#fffbeb',
-    },
-  ]
+  const visibleCards = FEATURE_CARDS.filter((card) => can(card.modulo))
+  const apiOk = health?.status === 'ok'
 
   return (
-    <Box>
-      <Typography variant="h4" sx={{ fontWeight: 700 }} gutterBottom>
-        Bienvenido a ITPlus
-      </Typography>
-      <Typography color="text.secondary" sx={{ mb: 3 }}>
-        Plataforma universal de consulta inteligente
-      </Typography>
+    <div id="page-inicio">
+      <div className={`main-header${entering ? ' entering' : ''}`}>
+        <h2>Bienvenido a ITPlus</h2>
+        <p>Plataforma universal de consulta inteligente</p>
+        <div className="badge-row">
+          <span className={`badge${apiOk ? ' ok' : ''}`}>
+            {apiOk && <span className="dot" />}
+            API: {apiOk ? 'ok' : health ? String(health.status) : 'sin conexión'}
+          </span>
+          <span className="badge neutral">
+            Documentos: {docStats.ready}/{docStats.total} listos
+          </span>
+          <span className="badge info">Fase {phase} activa</span>
+        </div>
+      </div>
 
-      <Box sx={{ display: 'flex', gap: 1, mb: 3, flexWrap: 'wrap' }}>
-        <Chip
-          label={health ? `API: ${health.status}` : 'API: sin conexión'}
-          color={health?.status === 'ok' ? 'success' : 'default'}
-          size="small"
-        />
-        <Chip label={`Documentos: ${docStats.ready}/${docStats.total} listos`} size="small" />
-      </Box>
+      {loading ? (
+        <div id="content-skeleton">
+          <div className="skeleton-row">
+            <div className="skel-block skel-metric" />
+            <div className="skel-block skel-metric" />
+            <div className="skel-block skel-metric" />
+          </div>
+          <div className="skeleton-grid">
+            <div className="skel-block skel-card" />
+            <div className="skel-block skel-card" />
+            <div className="skel-block skel-card" />
+            <div className="skel-block skel-card" />
+          </div>
+        </div>
+      ) : (
+        <div id="content-real">
+          <div className="metrics-row">
+            <div
+              className={`metric-card${entering ? ' entering' : ''}`}
+              style={{ animationDelay: '0ms' }}
+              data-hint="Total de conversaciones en Asistente, ITPlusBot y Consulta RAG."
+            >
+              <div className="m-label">Conversaciones</div>
+              <div className="m-value blue">{chatCount}</div>
+            </div>
+            <div
+              className={`metric-card${entering ? ' entering' : ''}`}
+              style={{ animationDelay: '60ms' }}
+              data-hint="Indica si el backend responde correctamente."
+            >
+              <div className="m-label">Estado API</div>
+              <div className={`m-value ${apiOk ? 'green' : 'amber'}`}>
+                {apiOk ? 'OK' : '—'}
+              </div>
+            </div>
+            <div
+              className={`metric-card${entering ? ' entering' : ''}`}
+              style={{ animationDelay: '120ms' }}
+              data-hint="Documentos procesados y listos para consultas de la IA."
+            >
+              <div className="m-label">Documentos indexados</div>
+              <div className="m-value amber">{docStats.ready}/{docStats.total}</div>
+            </div>
+          </div>
 
-      <Grid container spacing={3}>
-        {cards.map((card) => (
-          <Grid key={card.path} size={{ xs: 12, md: 4 }}>
-            <Card sx={{ height: '100%', bgcolor: card.color }}>
-              <CardActionArea onClick={() => navigate(card.path)} sx={{ height: '100%' }}>
-                <CardContent sx={{ p: 3 }}>
-                  {card.icon}
-                  <Typography variant="h6" sx={{ mt: 1, fontWeight: 700 }}>
-                    {card.title}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {card.desc}
-                  </Typography>
-                </CardContent>
-              </CardActionArea>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
-    </Box>
+          <div className="card-grid">
+            {visibleCards.map((card, index) => (
+              <button
+                key={card.path}
+                type="button"
+                className={`feature-card ${card.colorClass}${entering ? ' entering' : ''}`}
+                style={{ animationDelay: `${index * 70 + 120}ms` }}
+                title={card.desc}
+                onClick={() => navigate(card.path)}
+              >
+                <div className="fc-top">
+                  <div className={`fc-icon ${card.iconClass}`}>{card.icon}</div>
+                  <div className="fc-arrow"><ChevronRightIcon size={13} /></div>
+                </div>
+                <h3>{card.title}</h3>
+                <p>{card.desc}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

@@ -38,6 +38,13 @@ class Settings(BaseSettings):
 
     access_token_expire_minutes: int = 60 * 24
 
+    # Azure AD / Entra ID (inactive until env vars are set)
+    azure_tenant_id: str = ""
+    azure_client_id: str = ""
+    api_token_expire_hours: int = 24
+    sessions_idle_minutes: int = 30
+    sessions_retention_months: int = 6
+
 
 @lru_cache
 def get_settings() -> Settings:

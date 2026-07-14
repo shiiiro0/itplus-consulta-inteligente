@@ -56,6 +56,13 @@ def index_document_sync(document_id: str) -> None:
             db.commit()
             logger.info("Document %s indexed with %d chunks", document_id, len(chunks_data))
 
+            try:
+                from itplus.app.services.crisp_analyst.registry import register_document_dataset
+
+                register_document_dataset(db, document)
+            except Exception as reg_exc:
+                logger.warning("CRISP registration skipped for %s: %s", document_id, reg_exc)
+
         except Exception as exc:
             logger.error("Indexing failed for %s: %s", document_id, exc)
             document.status = "failed"

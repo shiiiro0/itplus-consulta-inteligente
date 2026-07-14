@@ -52,6 +52,68 @@ def parse_docx(file_path: str) -> list[dict]:
     return [{"content": c, "page": None} for c in _split_text(full_text)]
 
 
+def parse_csv(file_path: str) -> list[dict]:
+    import csv
+
+    lines: list[str] = []
+    with open(file_path, encoding="utf-8", errors="ignore", newline="") as f:
+        reader = csv.reader(f)
+        rows = list(reader)
+    if not rows:
+        return []
+
+    header = [c.strip() for c in rows[0]]
+    for row in rows[1:]:
+        cells = [c.strip() for c in row]
+        if not any(cells):
+            continue
+        if header and any(header):
+            pairs = [f"{h}: {v}" for h, v in zip(header, cells) if h and v]
+            lines.append(" | ".join(pairs) if pairs else " | ".join(cells))
+        else:
+            lines.append(" | ".join(cells))
+
+    full_text = "\n".join(lines)
+    # Una fila = un chunk para que vendedor/notas no se mezclen al buscar o graficar.
+    return [{"content": line, "page": None} for line in lines if line.strip()]
+
+
+def _sheet_rows_to_lines(rows: list[tuple]) -> list[str]:
+    if not rows:
+        return []
+    header = [str(c).strip() if c is not None else "" for c in rows[0]]
+    lines: list[str] = []
+    for row in rows[1:]:
+        cells = [str(c).strip() if c is not None else "" for c in row]
+        if not any(cells):
+            continue
+        if header and any(header):
+            pairs = [f"{h}: {v}" for h, v in zip(header, cells) if h and v]
+            lines.append(" | ".join(pairs) if pairs else " | ".join(cells))
+        else:
+            lines.append(" | ".join(cells))
+    return lines
+
+
+def parse_xlsx(file_path: str) -> list[dict]:
+    from openpyxl import load_workbook
+
+    chunks_with_meta: list[dict] = []
+    wb = load_workbook(file_path, read_only=True, data_only=True)
+    try:
+        for sheet in wb.worksheets:
+            rows = list(sheet.iter_rows(values_only=True))
+            lines = _sheet_rows_to_lines(rows)
+            if not lines:
+                continue
+            sheet_text = f"Hoja: {sheet.title}\n" + "\n".join(lines)
+            for chunk_text in _split_text(sheet_text):
+                chunks_with_meta.append({"content": chunk_text, "sheet": sheet.title})
+    finally:
+        wb.close()
+    return chunks_with_meta
+
+
 def parse_txt(file_path: str) -> list[dict]:
     text = Path(file_path).read_text(encoding="utf-8", errors="ignore")
     return [{"content": c, "page": None} for c in _split_text(text)]
@@ -68,8 +130,15 @@ def parse_document(file_path: str, mime_type: str) -> list[dict]:
         "application/msword",
     ) or suffix in (".docx", ".doc"):
         return parse_docx(file_path)
-    if mime_type.startswith("text/") or suffix in (".txt", ".md", ".csv"):
+    if mime_type.startswith("text/") or suffix in (".txt", ".md"):
         return parse_txt(file_path)
+    if suffix == ".csv" or mime_type == "text/csv":
+        return parse_csv(file_path)
+    if mime_type in (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-excel",
+    ) or suffix in (".xlsx", ".xlsm"):
+        return parse_xlsx(file_path)
 
     logger.warning("Unsupported mime type %s, attempting text read", mime_type)
     return parse_txt(file_path)

@@ -1,10 +1,9 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import '@fontsource/roboto/300.css'
-import '@fontsource/roboto/400.css'
-import '@fontsource/roboto/500.css'
-import '@fontsource/roboto/700.css'
 import App from './App.tsx'
+import { ensureRouteSync } from './navigation/routeSync'
+
+ensureRouteSync()
 
 // El login con Microsoft (MSAL) usa popup. Al volver de Entra, la ventana
 // emergente carga la redirectUri (la raíz del sitio) con la respuesta en el
@@ -19,8 +18,14 @@ const isMsalAuthPopup =
   window.opener !== window &&
   /[#?&](code|error|state)=/.test(window.location.hash + window.location.search)
 
-if (!isMsalAuthPopup) {
-  createRoot(document.getElementById('root')!).render(
+const rootEl = document.getElementById('root')
+
+if (isMsalAuthPopup) {
+  if (rootEl) {
+    rootEl.textContent = 'Completando inicio con Microsoft…'
+  }
+} else if (rootEl) {
+  createRoot(rootEl).render(
     <StrictMode>
       <App />
     </StrictMode>,

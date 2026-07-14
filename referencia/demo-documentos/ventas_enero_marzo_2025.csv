@@ -1,0 +1,13 @@
+mes;vendedor;producto;familia;unidades;monto_clp;region
+2025-01;Tomás Rojas;Monitor 27";PTP;45;22500000;RM
+2025-01;Tomás Rojas;Notebook Pro 15;PTP;32;48000000;RM
+2025-01;Paula Osorio;Teclado mecánico;PFD;120;3600000;V
+2025-01;Jaime Pérez;Servidor Rack 2U;PSA;8;64000000;RM
+2025-02;Tomás Rojas;Monitor 27";PTP;38;19000000;RM
+2025-02;Tomás Rojas;Mouse inalámbrico;PFD;95;1425000;RM
+2025-02;Camila Cabrera;Notebook Pro 15;PTP;28;42000000;RM
+2025-02;Paula Osorio;Monitor 27";PTP;22;11000000;V
+2025-03;Tomás Rojas;Monitor 27";PTP;52;26000000;RM
+2025-03;Tomás Rojas;Notebook Pro 15;PTP;41;61500000;RM
+2025-03;Jaime Pérez;Switch 48 puertos;PSA;15;22500000;RM
+2025-03;Camila Cabrera;Teclado mecánico;PFD;88;2640000;RM

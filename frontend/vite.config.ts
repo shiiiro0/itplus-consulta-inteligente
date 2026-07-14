@@ -16,5 +16,23 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    target: 'es2020',
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          if (id.includes('recharts') || id.includes('d3-')) return 'charts'
+          if (id.includes('@mui') || id.includes('@emotion')) return 'mui'
+          if (id.includes('@azure/msal')) return 'msal'
+          if (
+            id.includes('react-dom') ||
+            id.includes('react-router') ||
+            id.includes('/react/')
+          ) {
+            return 'react-vendor'
+          }
+        },
+      },
+    },
   },
 })

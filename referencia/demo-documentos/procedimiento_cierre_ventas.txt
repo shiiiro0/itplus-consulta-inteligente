@@ -1,0 +1,29 @@
+PROCEDIMIENTO INTERNO — CIERRE DE VENTAS MENSUAL
+ITPlus — Uso gerencial y comercial
+Última actualización: marzo 2026
+
+1. ALCANCE
+Este procedimiento aplica a todas las ventas facturadas en Chile (regiones RM, V y VIII).
+
+2. RESPONSABLES
+- Gerente comercial: valida totales por vendedor y región.
+- Finanzas: concilia facturación con ERP antes del día 5 del mes siguiente.
+- Operaciones: confirma que no existan quiebres abiertos mayores a 10 días.
+
+3. CRITERIOS DE CIERRE
+- Toda factura del mes debe estar en estado "cerrada" o "con quiebre justificado".
+- Las ventas con monto superior a $5.000.000 CLP requieren aprobación del gerente.
+- Los descuentos superiores al 15% deben tener registro en el CRM.
+
+4. INDICADORES QUE REVISA GERENCIA
+- Cumplimiento de meta por vendedor (%).
+- Variación interanual del trimestre (mismo período año anterior).
+- Concentración de ventas en top 3 productos.
+- Tasa de quiebres WMS vs SAP.
+
+5. FRECUENCIA
+- Corte parcial: cada viernes (ventas acumuladas de la semana).
+- Cierre definitivo: día hábil 3 del mes siguiente.
+
+6. ESCALAMIENTO
+Si un vendedor cumple menos del 70% de su meta al cierre de mes, el gerente comercial debe convocar reunión de revisión dentro de 5 días hábiles.
