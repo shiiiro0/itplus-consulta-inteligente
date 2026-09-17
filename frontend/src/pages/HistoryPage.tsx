@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import {
   Box, Chip, CircularProgress, Collapse, IconButton, Typography,
 } from '@mui/material'
@@ -99,7 +100,14 @@ export default function HistoryPage() {
             className={`app-tab${tab === t.value ? ' active' : ''}`}
             onClick={() => setTab(t.value)}
           >
-            {t.label}
+            {tab === t.value && (
+              <motion.span
+                layoutId="historyTabPill"
+                className="app-tab-pill"
+                transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+              />
+            )}
+            <span className="app-tab-label">{t.label}</span>
           </button>
         ))}
       </div>

@@ -1,5 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import {
+  animate,
+  motion,
+  useMotionValue,
+  useReducedMotion,
+  useSpring,
+} from 'framer-motion'
 import {
   getAssistantRoadmap,
   getChatHistory,
@@ -14,6 +21,79 @@ import {
   RobotIcon,
   SearchIcon,
 } from '../components/ItplusIcons'
+
+function CountUp({ value }: { value: number }) {
+  const reduceMotion = useReducedMotion()
+  const [display, setDisplay] = useState(reduceMotion ? value : 0)
+  const prevRef = useRef(reduceMotion ? value : 0)
+
+  useEffect(() => {
+    if (reduceMotion) {
+      setDisplay(value)
+      prevRef.current = value
+      return
+    }
+    const controls = animate(prevRef.current, value, {
+      duration: 0.8,
+      ease: [0.16, 1, 0.3, 1],
+      onUpdate: (v) => setDisplay(Math.round(v)),
+    })
+    prevRef.current = value
+    return () => controls.stop()
+  }, [value, reduceMotion])
+
+  return <>{display}</>
+}
+
+function TiltFeatureCard({
+  card,
+  index,
+  entering,
+  onNavigate,
+}: {
+  card: FeatureCard
+  index: number
+  entering: boolean
+  onNavigate: () => void
+}) {
+  const reduceMotion = useReducedMotion()
+  const rawX = useMotionValue(0)
+  const rawY = useMotionValue(0)
+  const rotateY = useSpring(rawX, { stiffness: 300, damping: 22 })
+  const rotateX = useSpring(rawY, { stiffness: 300, damping: 22 })
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (reduceMotion) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const px = (e.clientX - rect.left) / rect.width - 0.5
+    const py = (e.clientY - rect.top) / rect.height - 0.5
+    rawX.set(px * 9)
+    rawY.set(py * -7)
+  }
+  const handleMouseLeave = () => {
+    rawX.set(0)
+    rawY.set(0)
+  }
+
+  return (
+    <motion.button
+      type="button"
+      className={`feature-card ${card.colorClass}${entering ? ' entering' : ''}`}
+      style={{ animationDelay: `${index * 70 + 120}ms`, rotateX, rotateY, transformPerspective: 700 }}
+      title={card.desc}
+      onClick={onNavigate}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+    >
+      <div className="fc-top">
+        <div className={`fc-icon ${card.iconClass}`}>{card.icon}</div>
+        <div className="fc-arrow"><ChevronRightIcon size={13} /></div>
+      </div>
+      <h3>{card.title}</h3>
+      <p>{card.desc}</p>
+    </motion.button>
+  )
+}
 
 interface FeatureCard {
   title: string
@@ -144,7 +224,7 @@ export default function DashboardPage() {
               data-hint="Total de conversaciones en Asistente, ITPlusBot y Consulta RAG."
             >
               <div className="m-label">Conversaciones</div>
-              <div className="m-value blue">{chatCount}</div>
+              <div className="m-value blue"><CountUp value={chatCount} /></div>
             </div>
             <div
               className={`metric-card${entering ? ' entering' : ''}`}
@@ -162,27 +242,21 @@ export default function DashboardPage() {
               data-hint="Documentos procesados y listos para consultas de la IA."
             >
               <div className="m-label">Documentos indexados</div>
-              <div className="m-value amber">{docStats.ready}/{docStats.total}</div>
+              <div className="m-value amber">
+                <CountUp value={docStats.ready} />/<CountUp value={docStats.total} />
+              </div>
             </div>
           </div>
 
           <div className="card-grid">
             {visibleCards.map((card, index) => (
-              <button
+              <TiltFeatureCard
                 key={card.path}
-                type="button"
-                className={`feature-card ${card.colorClass}${entering ? ' entering' : ''}`}
-                style={{ animationDelay: `${index * 70 + 120}ms` }}
-                title={card.desc}
-                onClick={() => navigate(card.path)}
-              >
-                <div className="fc-top">
-                  <div className={`fc-icon ${card.iconClass}`}>{card.icon}</div>
-                  <div className="fc-arrow"><ChevronRightIcon size={13} /></div>
-                </div>
-                <h3>{card.title}</h3>
-                <p>{card.desc}</p>
-              </button>
+                card={card}
+                index={index}
+                entering={entering}
+                onNavigate={() => navigate(card.path)}
+              />
             ))}
           </div>
         </div>

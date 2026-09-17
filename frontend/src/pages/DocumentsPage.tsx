@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 
 import {
 
@@ -88,7 +89,8 @@ interface PendingFile {
 
 }
 
-
+const MotionTableRow = motion.create(TableRow)
+const MotionButton = motion.create(Button)
 
 export default function DocumentsPage() {
 
@@ -101,6 +103,18 @@ export default function DocumentsPage() {
   const [dragOver, setDragOver] = useState(false)
 
   const [error, setError] = useState('')
+
+  const [toastMsg, setToastMsg] = useState<string | null>(null)
+  const toastTimerRef = useRef<number | null>(null)
+  const reduceMotion = useReducedMotion()
+  const uploadBtnRef = useRef<HTMLButtonElement>(null)
+  const [magnet, setMagnet] = useState({ x: 0, y: 0 })
+
+  const showToast = useCallback((msg: string) => {
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current)
+    setToastMsg(msg)
+    toastTimerRef.current = window.setTimeout(() => setToastMsg(null), 3200)
+  }, [])
 
   const [category, setCategory] = useState('general')
 
@@ -126,7 +140,25 @@ export default function DocumentsPage() {
 
       const data = await listDocuments()
 
-      setDocs(data)
+      setDocs((prev) => {
+
+        const prevStatus = new Map(prev.map((d) => [d.id, d.status]))
+
+        for (const doc of data) {
+
+          const before = prevStatus.get(doc.id)
+
+          if (before && before !== 'ready' && doc.status === 'ready') {
+
+            showToast(`"${doc.filename}" indexado — ya disponible para el Asistente Gerencial.`)
+
+          }
+
+        }
+
+        return data
+
+      })
 
     } catch {
 
@@ -138,7 +170,7 @@ export default function DocumentsPage() {
 
     }
 
-  }, [])
+  }, [showToast])
 
 
 
@@ -464,25 +496,41 @@ export default function DocumentsPage() {
 
           )}
 
-          <Button
-
-            variant="contained"
-
-            startIcon={uploading ? <CircularProgress size={18} color="inherit" /> : <CloudUploadIcon />}
-
-            onClick={handleUpload}
-
-            disabled={uploading || pendingFiles.length === 0}
-
-            sx={{ bgcolor: '#1a365d', '&:hover': { bgcolor: '#153050' } }}
-
+          <Box
+            sx={{ p: 1 }}
+            onMouseMove={(e) => {
+              if (reduceMotion || !uploadBtnRef.current) return
+              const rect = uploadBtnRef.current.getBoundingClientRect()
+              const cx = rect.left + rect.width / 2
+              const cy = rect.top + rect.height / 2
+              setMagnet({ x: (e.clientX - cx) * 0.25, y: (e.clientY - cy) * 0.25 })
+            }}
+            onMouseLeave={() => setMagnet({ x: 0, y: 0 })}
           >
+            <MotionButton
 
-            {uploading ? 'Subiendo...' : pendingFiles.length === 0
-              ? 'Subir archivos'
-              : `Subir ${pendingFiles.length} archivo${pendingFiles.length !== 1 ? 's' : ''}`}
+              ref={uploadBtnRef}
+              variant="contained"
 
-          </Button>
+              startIcon={uploading ? <CircularProgress size={18} color="inherit" /> : <CloudUploadIcon />}
+
+              onClick={handleUpload}
+
+              disabled={uploading || pendingFiles.length === 0}
+
+              sx={{ bgcolor: '#1a365d', '&:hover': { bgcolor: '#153050' } }}
+              animate={{ x: magnet.x, y: magnet.y }}
+              transition={{ type: 'spring', stiffness: 250, damping: 18 }}
+              whileTap={{ scale: 0.94 }}
+
+            >
+
+              {uploading ? 'Subiendo...' : pendingFiles.length === 0
+                ? 'Subir archivos'
+                : `Subir ${pendingFiles.length} archivo${pendingFiles.length !== 1 ? 's' : ''}`}
+
+            </MotionButton>
+          </Box>
 
         </Box>
 
@@ -538,9 +586,14 @@ export default function DocumentsPage() {
 
               ) : (
 
-                docs.map((doc) => (
+                docs.map((doc, index) => (
 
-                  <TableRow key={doc.id}>
+                  <MotionTableRow
+                    key={doc.id}
+                    initial={reduceMotion ? false : { opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ type: 'spring', stiffness: 340, damping: 30, delay: Math.min(index * 0.05, 0.4) }}
+                  >
 
                     <TableCell>
 
@@ -574,15 +627,25 @@ export default function DocumentsPage() {
 
                     <TableCell>
 
-                      <Chip
+                      <AnimatePresence mode="wait" initial={false}>
+                        <motion.span
+                          key={doc.status}
+                          style={{ display: 'inline-block' }}
+                          initial={reduceMotion ? false : { opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ type: 'spring', stiffness: 420, damping: 22 }}
+                        >
+                          <Chip
 
-                        label={STATUS_LABELS[doc.status] ?? doc.status}
+                            label={STATUS_LABELS[doc.status] ?? doc.status}
 
-                        color={STATUS_COLORS[doc.status] ?? 'default'}
+                            color={STATUS_COLORS[doc.status] ?? 'default'}
 
-                        size="small"
+                            size="small"
 
-                      />
+                          />
+                        </motion.span>
+                      </AnimatePresence>
 
                       {doc.error_message && (
 
@@ -632,7 +695,7 @@ export default function DocumentsPage() {
 
                     </TableCell>
 
-                  </TableRow>
+                  </MotionTableRow>
 
                 ))
 
@@ -645,6 +708,20 @@ export default function DocumentsPage() {
         </Paper>
 
       )}
+
+      <AnimatePresence>
+        {toastMsg && (
+          <motion.div
+            className="upload-toast"
+            initial={reduceMotion ? false : { opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 40 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+          >
+            {toastMsg}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </PageChrome>
 
