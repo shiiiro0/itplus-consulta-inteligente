@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from itplus.app.api.deps import get_current_user, get_optional_user
+from itplus.app.api.deps import get_current_user
 from itplus.app.core.database import get_db
 from itplus.app.core.phases import BOT_KNOWLEDGE_CATEGORIES, CURRENT_PHASE
 from itplus.app.models.user import User
@@ -47,11 +47,11 @@ def bot_roadmap():
 def create_conversation(
     payload: CreateConversationRequest | None = None,
     db: Session = Depends(get_db),
-    current_user: User | None = Depends(get_optional_user),
+    current_user: User = Depends(get_current_user),
 ):
     svc = ConversationService(db)
     conv = svc.create_conversation(
-        user_id=current_user.id if current_user else None,
+        user_id=current_user.id,
         context_type=payload.context_type if payload else None,
         context_id=payload.context_id if payload else None,
     )
@@ -62,14 +62,14 @@ def create_conversation(
 def send_message(
     payload: BotMessageRequest,
     db: Session = Depends(get_db),
-    current_user: User | None = Depends(get_optional_user),
+    current_user: User = Depends(get_current_user),
 ):
     svc = ConversationService(db)
     try:
         result = svc.send_message(
             message=payload.message,
             conversation_id=payload.conversation_id,
-            user_id=current_user.id if current_user else None,
+            user_id=current_user.id,
             category=payload.category,
         )
     except ValueError as exc:
@@ -82,11 +82,11 @@ def send_message(
 def finish_conversation(
     conversation_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User | None = Depends(get_optional_user),
+    current_user: User = Depends(get_current_user),
 ):
     svc = ConversationService(db)
     try:
-        result = svc.finish_conversation_manually(conversation_id)
+        result = svc.finish_conversation_manually(conversation_id, current_user.id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
@@ -97,10 +97,10 @@ def finish_conversation(
 def get_conversation(
     conversation_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User | None = Depends(get_optional_user),
+    current_user: User = Depends(get_current_user),
 ):
     svc = ConversationService(db)
-    conversation = svc.get_conversation(conversation_id)
+    conversation = svc.get_conversation(conversation_id, current_user.id)
     if not conversation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversación no encontrada")
 
@@ -126,10 +126,10 @@ def get_conversation(
 def get_summary(
     conversation_id: UUID,
     db: Session = Depends(get_db),
-    current_user: User | None = Depends(get_optional_user),
+    current_user: User = Depends(get_current_user),
 ):
     summary_svc = SummaryService(db)
-    summary = summary_svc.get_summary(conversation_id)
+    summary = summary_svc.get_summary(conversation_id, current_user.id)
     if not summary:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

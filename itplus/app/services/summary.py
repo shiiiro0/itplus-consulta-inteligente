@@ -71,8 +71,15 @@ class SummaryService:
         self.db.refresh(summary)
         return summary
 
-    def get_summary(self, conversation_id: uuid.UUID) -> Summary | None:
-        return self.db.query(Summary).filter(Summary.conversation_id == conversation_id).first()
+    def get_summary(
+        self, conversation_id: uuid.UUID, user_id: uuid.UUID | None = None
+    ) -> Summary | None:
+        query = self.db.query(Summary).filter(Summary.conversation_id == conversation_id)
+        if user_id is not None:
+            query = query.join(Conversation, Conversation.id == Summary.conversation_id).filter(
+                Conversation.user_id == user_id
+            )
+        return query.first()
 
     def generate_summary_async(self, conversation_id: uuid.UUID) -> None:
         """Dispatch summary generation to Celery worker."""

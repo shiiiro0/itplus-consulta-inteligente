@@ -209,7 +209,7 @@ class AssistantService:
     ) -> PreparedAssistantTurn:
         if conversation_id:
             conversation = self.get_conversation(conversation_id)
-            if not conversation:
+            if not conversation or conversation.user_id != user_id:
                 raise ValueError("Conversación no encontrada")
         else:
             conversation = self.create_conversation(user_id)

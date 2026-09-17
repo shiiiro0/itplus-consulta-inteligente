@@ -73,19 +73,6 @@ def get_current_user(
     return user
 
 
-def get_optional_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(security),
-    db: Session = Depends(get_db),
-) -> User | None:
-    if credentials is None:
-        return None
-    try:
-        payload = decode_access_token(credentials.credentials)
-        return get_user_by_login(db, payload["username"])
-    except ValueError:
-        return None
-
-
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
     if current_user.rol_name.lower() != ADMIN_ROLE.lower():
         raise HTTPException(

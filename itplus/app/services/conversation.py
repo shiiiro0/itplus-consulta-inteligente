@@ -74,8 +74,13 @@ class ConversationService:
         self.db.refresh(conversation)
         return conversation
 
-    def get_conversation(self, conversation_id: uuid.UUID) -> Conversation | None:
-        return self.db.query(Conversation).filter(Conversation.id == conversation_id).first()
+    def get_conversation(
+        self, conversation_id: uuid.UUID, user_id: uuid.UUID | None = None
+    ) -> Conversation | None:
+        query = self.db.query(Conversation).filter(Conversation.id == conversation_id)
+        if user_id is not None:
+            query = query.filter(Conversation.user_id == user_id)
+        return query.first()
 
     def get_messages(self, conversation_id: uuid.UUID) -> list[Message]:
         return (
@@ -202,7 +207,7 @@ class ConversationService:
         category: str | None = None,
     ) -> BotTurnResult:
         if conversation_id:
-            conversation = self.get_conversation(conversation_id)
+            conversation = self.get_conversation(conversation_id, user_id)
             if not conversation:
                 raise ValueError("Conversation not found")
             if conversation.status == "finished":
@@ -288,9 +293,11 @@ class ConversationService:
             connector_note=connector_note,
         )
 
-    def finish_conversation_manually(self, conversation_id: uuid.UUID) -> BotTurnResult:
+    def finish_conversation_manually(
+        self, conversation_id: uuid.UUID, user_id: uuid.UUID | None = None
+    ) -> BotTurnResult:
         """Allow user to manually finish chat."""
-        conversation = self.get_conversation(conversation_id)
+        conversation = self.get_conversation(conversation_id, user_id)
         if not conversation:
             raise ValueError("Conversation not found")
         if conversation.status == "finished":

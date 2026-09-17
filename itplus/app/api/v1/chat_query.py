@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from itplus.app.api.deps import get_current_user, get_optional_user
+from itplus.app.api.deps import get_current_user
 from itplus.app.core.database import get_db
 from itplus.app.core.phases import CURRENT_PHASE, RAG_KNOWLEDGE_CATEGORIES
 from itplus.app.models.user import User
@@ -25,12 +25,12 @@ def rag_roadmap():
 def query_documents(
     payload: QueryRequest,
     db: Session = Depends(get_db),
-    current_user: User | None = Depends(get_optional_user),
+    current_user: User = Depends(get_current_user),
 ):
     svc = RAGService(db)
     return svc.query(
         question=payload.question,
-        user_id=current_user.id if current_user else None,
+        user_id=current_user.id,
         category=payload.category,
     )
 

@@ -85,13 +85,21 @@ class ModulePermissionMiddleware(BaseHTTPMiddleware):
 
         auth = request.headers.get("authorization", "")
         if not auth.lower().startswith("bearer "):
-            return await call_next(request)
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "No autenticado"},
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
         token = auth.split(" ", 1)[1].strip()
         try:
             payload = decode_access_token(token)
         except ValueError:
-            return await call_next(request)
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Token inválido o expirado"},
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
         rol = str(payload.get("rol", ""))
         if rol.lower() == ADMIN_ROLE.lower():
