@@ -272,6 +272,12 @@
   animation: msg-in 0.3s ease both;
 }
 
+/* Bubbles animated by framer-motion own their entrance transform;
+   the CSS keyframe would otherwise fight motion's inline styles. */
+.msg.msg-motion {
+  animation: none;
+}
+
 .msg-user {
   flex-direction: row-reverse;
 }

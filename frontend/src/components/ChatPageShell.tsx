@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import {
   CopyIcon,
   DotsVerticalIcon,
@@ -78,13 +79,19 @@ interface ChatUserBubbleProps {
 }
 
 export function ChatUserBubble({ content, time }: ChatUserBubbleProps) {
+  const reduceMotion = useReducedMotion()
   return (
-    <div className="msg msg-user">
+    <motion.div
+      className="msg msg-user msg-motion"
+      initial={reduceMotion ? false : { opacity: 0, y: 14, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+    >
       <div className="msg-body">
         <div className="msg-bubble">{content}</div>
         <span className="msg-time">{time ?? formatMsgTime()}</span>
       </div>
-    </div>
+    </motion.div>
   )
 }
 
@@ -114,6 +121,7 @@ export function ChatAssistantBubble({
   const [liked, setLiked] = useState(false)
   const [disliked, setDisliked] = useState(false)
   const [copied, setCopied] = useState(false)
+  const reduceMotion = useReducedMotion()
   const resolvedFollowups = followups ?? (!streaming ? getFollowups(content) : [])
   const resolvedSourceCount = sourcesCount ?? sources?.length ?? 0
 
@@ -128,7 +136,12 @@ export function ChatAssistantBubble({
   }
 
   return (
-    <div className="msg msg-assistant">
+    <motion.div
+      className="msg msg-assistant msg-motion"
+      initial={reduceMotion ? false : { opacity: 0, y: 14, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+    >
       <div className={`msg-avatar bot${streaming && !content ? ' pulsing' : ''}`}>
         <RobotIcon size={17} />
       </div>
@@ -141,14 +154,22 @@ export function ChatAssistantBubble({
           )}
         </div>
 
-        {resolvedSourceCount > 0 && !streaming && (
-          <div className="msg-sources msg-sources-compact">
-            <span className="source-summary">
-              Basado en {resolvedSourceCount}{' '}
-              {resolvedSourceCount === 1 ? 'documento' : 'documentos'}
-            </span>
-          </div>
-        )}
+        <AnimatePresence>
+          {resolvedSourceCount > 0 && !streaming && (
+            <motion.div
+              key="sources"
+              className="msg-sources msg-sources-compact"
+              initial={reduceMotion ? false : { opacity: 0, y: 6, scale: 0.92 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ type: 'spring', stiffness: 420, damping: 24 }}
+            >
+              <span className="source-summary">
+                Basado en {resolvedSourceCount}{' '}
+                {resolvedSourceCount === 1 ? 'documento' : 'documentos'}
+              </span>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {!streaming && content && (
           <div className="msg-actions">
@@ -192,22 +213,44 @@ export function ChatAssistantBubble({
           </div>
         )}
 
-        {resolvedFollowups.length > 0 && !streaming && (
-          <div className="msg-followups">
-            {resolvedFollowups.map((chip) => (
-              <button
-                key={chip}
-                type="button"
-                className="followup-chip"
-                onClick={() => onFollowup?.(chip)}
-              >
-                {chip}
-              </button>
-            ))}
-          </div>
-        )}
+        <AnimatePresence>
+          {resolvedFollowups.length > 0 && !streaming && (
+            <motion.div
+              key="followups"
+              className="msg-followups"
+              initial="hidden"
+              animate="show"
+              variants={
+                reduceMotion
+                  ? undefined
+                  : { hidden: {}, show: { transition: { staggerChildren: 0.06 } } }
+              }
+            >
+              {resolvedFollowups.map((chip) => (
+                <motion.button
+                  key={chip}
+                  type="button"
+                  className="followup-chip"
+                  variants={
+                    reduceMotion
+                      ? undefined
+                      : {
+                          hidden: { opacity: 0, y: 6, scale: 0.9 },
+                          show: { opacity: 1, y: 0, scale: 1 },
+                        }
+                  }
+                  transition={{ type: 'spring', stiffness: 420, damping: 24 }}
+                  whileTap={{ scale: 0.94 }}
+                  onClick={() => onFollowup?.(chip)}
+                >
+                  {chip}
+                </motion.button>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
-    </div>
+    </motion.div>
   )
 }
 
