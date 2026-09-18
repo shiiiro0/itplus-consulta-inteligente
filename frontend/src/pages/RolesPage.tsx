@@ -12,13 +12,10 @@ import {
   getRoles, crearRol, actualizarRol, eliminarRol,
   type RolItem, type SistemaItem,
 } from '../api/roles'
+import { getErrorMessage as apiError } from '../api/client'
 import { SortableDataTable } from '../components/SortableDataTable'
 
 type EvStr = ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-
-function apiError(e: unknown, fallback: string): string {
-  return (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? fallback
-}
 
 export default function RolesPage() {
   const qc = useQueryClient()

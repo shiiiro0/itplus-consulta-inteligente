@@ -25,6 +25,26 @@ def get_password_hash(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
+# Hash bcrypt fijo, sin significado real, usado solo para igualar tiempos de
+# respuesta en el login cuando el usuario no existe. Sin esto, un login con
+# un username inexistente se resolvía casi al instante (nunca se llamaba a
+# bcrypt.checkpw), mientras que un username real con contraseña incorrecta
+# tardaba lo que tarda bcrypt (decenas de ms) — un canal lateral de tiempo
+# que permite enumerar qué usernames existen sin ver ningún mensaje de error
+# distinto.
+_DUMMY_PASSWORD_HASH = get_password_hash("itplus-dummy-password-for-constant-time-login")
+
+
+def verify_password_constant_time(plain_password: str, hashed_password: str | None) -> bool:
+    """Como verify_password, pero siempre ejecuta bcrypt.checkpw (contra un
+    hash dummy si hashed_password es None) para no filtrar por tiempo si el
+    usuario existe o no."""
+    return bcrypt.checkpw(
+        plain_password.encode("utf-8"),
+        (hashed_password or _DUMMY_PASSWORD_HASH).encode("utf-8"),
+    )
+
+
 def create_access_token(
     subject: str,
     rol: str,

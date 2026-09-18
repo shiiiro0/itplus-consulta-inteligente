@@ -23,6 +23,10 @@ frontend/dist/
 .DS_Store
 Thumbs.db
 
+# Instaladores sueltos que no son parte del proyecto (p. ej. "Claude Setup.exe"
+# terminó commiteado por accidente una vez — no debería volver a pasar).
+*.exe
+
 # Logs
 *.log
 logs/

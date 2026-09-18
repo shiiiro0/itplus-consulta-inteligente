@@ -7,6 +7,7 @@ from collections import Counter
 
 from itplus.app.connectors.base import ConnectorHit
 from itplus.app.services.vendor_rows import parse_vendor_records
+from itplus.app.utils.numbers import parse_localized_float as _parse_float
 
 _COUNT_HINTS = (
     "cuanto", "cuánto", "cuantos", "cuántos", "cantidad", "total", "conteo",
@@ -52,13 +53,6 @@ def _infer_focus_field(question: str) -> str | None:
 
 def _parse_row_pairs(text: str) -> dict[str, str]:
     return {m.group(1).lower(): m.group(2).strip() for m in _PAIR_PATTERN.finditer(text)}
-
-
-def _parse_float(value: str) -> float | None:
-    try:
-        return float(value.replace(",", ".").strip())
-    except ValueError:
-        return None
 
 
 def _format_clp(value: float) -> str:

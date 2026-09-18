@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 
+from itplus.app.utils.numbers import parse_localized_float as _parse_float
+
 _PAIR_PATTERN = re.compile(r"([a-zA-Z0-9_áéíóúñ]+):\s*([^|]+)")
 
 _INVALID_VENDOR_MARKERS = (
@@ -21,13 +23,6 @@ _INVALID_VENDOR_MARKERS = (
 
 def _parse_row_pairs(text: str) -> dict[str, str]:
     return {m.group(1).lower(): m.group(2).strip() for m in _PAIR_PATTERN.finditer(text)}
-
-
-def _parse_float(value: str) -> float | None:
-    try:
-        return float(str(value).replace(",", ".").strip())
-    except (ValueError, TypeError):
-        return None
 
 
 def is_valid_vendor_name(name: str) -> bool:

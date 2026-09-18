@@ -10,6 +10,7 @@ import {
   deleteChat,
   exportChat,
   notifyChatsUpdated,
+  getErrorMessage,
   type SourceCitation,
 } from '../api/client'
 import { useTypewriterStream } from '../hooks/useTypewriterStream'
@@ -169,11 +170,11 @@ export default function BotPage() {
         setLoading(false)
         notifyChatsUpdated()
       })
-    } catch {
+    } catch (err) {
       typewriter.reset()
       updateAssistantMessage((msg) => ({
         ...msg,
-        content: 'Lo siento, hubo un error al procesar tu mensaje. Intenta de nuevo.',
+        content: getErrorMessage(err, 'Lo siento, hubo un error al procesar tu mensaje. Intenta de nuevo.'),
         streaming: false,
       }))
       setLoading(false)

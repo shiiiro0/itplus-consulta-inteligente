@@ -9,6 +9,7 @@ import {
   deleteChat,
   exportChat,
   notifyChatsUpdated,
+  getErrorMessage,
   type QueryResponse,
   type SourceCitation,
 } from '../api/client'
@@ -171,19 +172,23 @@ export default function QueryPage() {
         setLoading(false)
         notifyChatsUpdated()
       })
-    } catch {
+    } catch (err) {
       typewriter.reset()
+      // Antes se mostraba siempre "Verifica que haya documentos indexados"
+      // sin importar la causa real (sesión vencida, LLM caído, red, etc.) —
+      // un diagnóstico equivocado la mayoría de las veces.
+      const message = getErrorMessage(
+        err,
+        'Error al procesar la consulta. Verifica que haya documentos indexados.',
+      )
       setTurns((prev) => {
         const next = [...prev]
         if (next[turnIndex]) {
           next[turnIndex] = {
             ...next[turnIndex],
             streaming: false,
-            displayAnswer: 'Error al procesar la consulta. Verifica que haya documentos indexados.',
-            response: {
-              answer: 'Error al procesar la consulta. Verifica que haya documentos indexados.',
-              sources: [],
-            },
+            displayAnswer: message,
+            response: { answer: message, sources: [] },
           }
         }
         return next

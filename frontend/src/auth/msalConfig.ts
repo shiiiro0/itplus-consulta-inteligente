@@ -53,8 +53,16 @@ export async function azureLogout(): Promise<void> {
   if (!isAzureEnabled) return
   try {
     const msal = await ensureInit()
-    await msal.clearCache()
+    // clearCache() solo borraba el cache local de MSAL — la sesión SSO en
+    // Microsoft (la cookie de login.microsoftonline.com) seguía activa, así
+    // que un siguiente "Iniciar sesión con Microsoft" en el mismo navegador
+    // volvía a autenticar sin pedir credenciales, sin importar que la app
+    // hubiera "cerrado sesión". logoutPopup() sí termina la sesión en el
+    // proveedor (y de paso también limpia el cache local).
+    const account = msal.getActiveAccount() ?? msal.getAllAccounts()[0]
+    await msal.logoutPopup({ account, mainWindowRedirectUri: window.location.origin })
   } catch {
-    /* noop */
+    // Si el popup fue bloqueado o el usuario lo cerró, no bloqueamos el
+    // logout local por esto — AuthContext ya limpió el token/estado propio.
   }
 }

@@ -13,6 +13,8 @@ import {
 import { getSessions, getSessionHistory, revokeSession, type SessionRow, type HistoryFilters } from '../api/sessions'
 import { getSettings, updateSettings, type SettingItem } from '../api/settings'
 import { SortableDataTable } from '../components/SortableDataTable'
+import MetricCard from '../components/MetricCard'
+import { getErrorMessage } from '../api/client'
 
 function fmtDateTime(iso: string | null): string {
   if (!iso) return '—'
@@ -67,24 +69,6 @@ function parseUA(ua: string | null): string {
   return `${br} · ${os}`
 }
 
-function MetricCard({ title, value, icon, color }: {
-  title: string; value: number; icon: React.ReactNode; color: string
-}) {
-  return (
-    <Card>
-      <CardContent sx={{ py: 1.5 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Box>
-            <Typography variant="caption" color="text.secondary">{title}</Typography>
-            <Typography variant="h5" sx={{ fontWeight: 700 }} color={color}>{value}</Typography>
-          </Box>
-          <Box sx={{ color, opacity: 0.85 }}>{icon}</Box>
-        </Box>
-      </CardContent>
-    </Card>
-  )
-}
-
 function SecuritySettings() {
   const qc = useQueryClient()
   const { data, isLoading, isError } = useQuery({ queryKey: ['settings'], queryFn: getSettings })
@@ -106,7 +90,7 @@ function SecuritySettings() {
       setMsg('Configuración guardada.'); setErr('')
       qc.invalidateQueries({ queryKey: ['settings'] })
     },
-    onError: (e) => setErr((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'No se pudo guardar la configuración.'),
+    onError: (e) => setErr(getErrorMessage(e, 'No se pudo guardar la configuración.')),
   })
 
   const dirty = useMemo(() => {
@@ -202,7 +186,7 @@ export default function SessionsPanel() {
   const revokeMut = useMutation({
     mutationFn: (jti: string) => revokeSession(jti),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['sessions'] }); setToRevoke(null) },
-    onError: (e) => setError((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'No se pudo cerrar la sesión.'),
+    onError: (e) => setError(getErrorMessage(e, 'No se pudo cerrar la sesión.')),
   })
 
   const sessions = data?.sessions ?? []

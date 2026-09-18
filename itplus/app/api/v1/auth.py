@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from itplus.app.api.deps import get_current_user, require_admin
 from itplus.app.core.azure_auth import AzureAuthError, is_azure_configured, validar_token_azure
 from itplus.app.core.database import get_db
-from itplus.app.core.security import create_access_token, verify_password
+from itplus.app.core.security import create_access_token, verify_password_constant_time
 from itplus.app.models.user import User
 from itplus.app.schemas.auth import (
     AzureLoginRequest,
@@ -72,7 +72,13 @@ def _build_login_response(db: Session, user: User, token: str) -> LoginResponse:
 @router.post("/login", response_model=LoginResponse)
 def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
     user = get_user_by_login(db, payload.username)
-    if not user or not verify_password(payload.password, user.password_hash):
+    # Siempre se llama a verify_password_constant_time, exista o no el
+    # usuario (le pasamos None si no existe) — así el tiempo de respuesta no
+    # delata si el username es válido.
+    password_ok = verify_password_constant_time(
+        payload.password, user.password_hash if user else None
+    )
+    if not user or not password_ok:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Usuario o contraseña incorrectos",

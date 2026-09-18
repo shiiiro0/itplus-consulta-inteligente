@@ -10,14 +10,11 @@ from itplus.app.connectors.base import ConnectorHit
 from itplus.app.schemas.analytics import AnalyticsPayload, ChartDataset, ChartSpec, ComparisonSpec, TableSpec
 from itplus.app.services.tabular_insights import build_tabular_summary
 from itplus.app.services.vendor_rows import parse_vendor_records
+from itplus.app.utils.numbers import parse_localized_float as _parse_float
 
 _PAIR_PATTERN = re.compile(r"([a-zA-Z0-9_áéíóúñ]+):\s*([^|\n]+)")
 _SALE_ROW_RE = re.compile(
     r"(20\d{2}-(?:0[1-9]|1[0-2]));([^;|]+);([^;|]+);([^;|]+);(\d+);(\d+)",
-)
-_VENDOR_ROW_RE = re.compile(
-    r"^([A-Za-zÁ-ú][A-Za-zÁ-ú\s\.]+);(\d{6,});(\d{6,});([\d.]+);([^;|]+)",
-    re.M,
 )
 _REGION_RE = re.compile(r"region:\s*([^|]+)\s*\|\s*ventas_q1_clp:\s*(\d+)", re.I)
 
@@ -85,13 +82,6 @@ def resolve_retrieval_question(
 
 def _parse_row_pairs(text: str) -> dict[str, str]:
     return {m.group(1).lower(): m.group(2).strip() for m in _PAIR_PATTERN.finditer(text)}
-
-
-def _parse_float(value: str) -> float | None:
-    try:
-        return float(str(value).replace(",", ".").strip())
-    except (ValueError, TypeError):
-        return None
 
 
 def _format_clp_short(value: float) -> str:

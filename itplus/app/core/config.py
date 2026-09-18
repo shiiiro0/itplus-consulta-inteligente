@@ -20,6 +20,9 @@ class Settings(BaseSettings):
 
     app_name: str = "ITPlus Consulta Inteligente"
     secret_key: str = _DEFAULT_SECRET_KEY
+    # Controla si Swagger (/api/docs), ReDoc (/api/redoc) y el schema OpenAPI
+    # quedan expuestos (ver run_itplus.py) — antes esta flag existía pero no
+    # se usaba en ningún lado ("decorativa").
     debug: bool = True
 
     database_url: str = "postgresql://itplus:itplus@localhost:5432/consulta_db"

@@ -6,6 +6,8 @@ import logging
 import re
 from pathlib import Path
 
+from itplus.app.utils.text_encoding import read_text_best_effort
+
 logger = logging.getLogger(__name__)
 
 CHUNK_SIZE = 800
@@ -62,20 +64,24 @@ def parse_docx(file_path: str) -> list[dict]:
 
 def parse_csv(file_path: str) -> list[dict]:
     import csv
+    import io
 
     lines: list[str] = []
-    with open(file_path, encoding="utf-8", errors="ignore", newline="") as f:
-        sample = f.read(8192)
-        f.seek(0)
-        try:
-            # Exportaciones de Excel en configuración regional Chile/LatAm
-            # usan ";" como separador (porque "," es el separador decimal),
-            # así que no podemos asumir "," a ciegas.
-            dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
-        except csv.Error:
-            dialect = csv.excel  # fallback: "," estándar
-        reader = csv.reader(f, dialect)
-        rows = list(reader)
+    # read_text_best_effort intenta UTF-8 primero y cae a cp1252/latin-1 si
+    # el archivo no es UTF-8 válido (típico de exports viejos de Excel en
+    # español) — antes se forzaba UTF-8 con errors="ignore" y se perdían
+    # tildes/ñ en silencio.
+    text = read_text_best_effort(file_path)
+    sample = text[:8192]
+    try:
+        # Exportaciones de Excel en configuración regional Chile/LatAm
+        # usan ";" como separador (porque "," es el separador decimal),
+        # así que no podemos asumir "," a ciegas.
+        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
+    except csv.Error:
+        dialect = csv.excel  # fallback: "," estándar
+    reader = csv.reader(io.StringIO(text, newline=""), dialect)
+    rows = list(reader)
     if not rows:
         return []
 
@@ -132,7 +138,7 @@ def parse_xlsx(file_path: str) -> list[dict]:
 
 
 def parse_txt(file_path: str) -> list[dict]:
-    text = Path(file_path).read_text(encoding="utf-8", errors="ignore")
+    text = read_text_best_effort(file_path)
     return [{"content": c, "page": None} for c in _split_text(text)]
 
 

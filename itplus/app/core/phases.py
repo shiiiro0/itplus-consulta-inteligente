@@ -79,19 +79,41 @@ KNOWLEDGE_CATEGORIES: list[dict[str, str]] = [
     {"key": "soporte", "label": "Soporte técnico"},
 ]
 
-BOT_KNOWLEDGE_CATEGORIES: list[dict[str, str]] = [
-    {"key": "soporte", "label": "Soporte técnico"},
-    {"key": "politicas", "label": "Políticas y procedimientos"},
-    {"key": "operaciones", "label": "Operaciones"},
-    {"key": "general", "label": "Toda la base"},
-]
+_CATEGORY_LABELS: dict[str, str] = {c["key"]: c["label"] for c in KNOWLEDGE_CATEGORIES}
 
-RAG_KNOWLEDGE_CATEGORIES: list[dict[str, str]] = [
-    {"key": "general", "label": "Toda la base"},
-    {"key": "politicas", "label": "Políticas y procedimientos"},
-    {"key": "soporte", "label": "Soporte técnico"},
-    {"key": "ventas", "label": "Ventas"},
-    {"key": "productos", "label": "Productos"},
-    {"key": "operaciones", "label": "Operaciones"},
-    {"key": "finanzas", "label": "Finanzas"},
-]
+
+def _category_subset(keys_with_label_overrides: list[tuple[str, str | None]]) -> list[dict[str, str]]:
+    """Construye un subconjunto de categorías a partir de KNOWLEDGE_CATEGORIES
+    en vez de copiar key+label a mano en cada lista — antes había 3 listas
+    mantenidas por separado y nada garantizaba que sus "key" siguieran
+    existiendo en la lista canónica (o que un typo no las desincronizara
+    en silencio). Los labels siguen siendo personalizables por motor
+    (p. ej. "general" se muestra como "Toda la base" en Bot/RAG)."""
+    result: list[dict[str, str]] = []
+    for key, label_override in keys_with_label_overrides:
+        if key not in _CATEGORY_LABELS:
+            raise ValueError(f"Categoría de conocimiento desconocida: '{key}'")
+        result.append({"key": key, "label": label_override or _CATEGORY_LABELS[key]})
+    return result
+
+
+BOT_KNOWLEDGE_CATEGORIES: list[dict[str, str]] = _category_subset(
+    [
+        ("soporte", None),
+        ("politicas", None),
+        ("operaciones", None),
+        ("general", "Toda la base"),
+    ]
+)
+
+RAG_KNOWLEDGE_CATEGORIES: list[dict[str, str]] = _category_subset(
+    [
+        ("general", "Toda la base"),
+        ("politicas", None),
+        ("soporte", None),
+        ("ventas", None),
+        ("productos", None),
+        ("operaciones", None),
+        ("finanzas", None),
+    ]
+)

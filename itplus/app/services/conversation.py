@@ -18,7 +18,7 @@ from itplus.app.schemas.chat_query import SourceCitation
 from itplus.app.services.llm_provider import llm_provider
 from itplus.app.services.retrieval import RetrievalService
 from itplus.app.services.summary import SummaryService
-from itplus.app.utils.document_location import format_document_location, parse_document_location
+from itplus.app.utils.document_location import build_context_from_hits, hits_to_source_citations
 from itplus.app.utils.small_talk import is_small_talk
 
 logger = logging.getLogger(__name__)
@@ -104,21 +104,7 @@ class ConversationService:
         return f"ITP-{stamp}-{suffix}"
 
     def _hits_to_sources(self, hits: list[dict]) -> list[SourceCitation]:
-        sources: list[SourceCitation] = []
-        for hit in hits:
-            page, sheet = parse_document_location(hit)
-            excerpt = hit["content"][:300] + ("..." if len(hit["content"]) > 300 else "")
-            sources.append(
-                SourceCitation(
-                    document_id=hit["document_id"],
-                    document_name=hit["document_name"],
-                    excerpt=excerpt,
-                    page=page,
-                    sheet=sheet,
-                    score=hit["score"],
-                )
-            )
-        return sources
+        return hits_to_source_citations(hits)
 
     def _sources_to_metadata(self, sources: list[SourceCitation]) -> dict:
         return {
@@ -139,16 +125,7 @@ class ConversationService:
         return out
 
     def _build_context(self, hits: list[dict], connector_note: str | None = None) -> str:
-        parts: list[str] = []
-        if connector_note:
-            parts.append(f"[Sistemas conectados]\n{connector_note}")
-        for i, hit in enumerate(hits, 1):
-            page, sheet = parse_document_location(hit)
-            loc = format_document_location(page, sheet)
-            parts.append(
-                f"[Fuente {i}: {hit['document_name']}{loc}]\n{hit['content']}"
-            )
-        return "\n\n---\n\n".join(parts)
+        return build_context_from_hits(hits, connector_note)
 
     def _build_llm_messages(
         self,

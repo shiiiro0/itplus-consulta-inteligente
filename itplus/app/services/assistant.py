@@ -106,18 +106,6 @@ class AssistantService:
         self.db.refresh(conversation)
         return conversation
 
-    def get_active_conversation(self, user_id: uuid.UUID) -> Conversation | None:
-        return (
-            self.db.query(Conversation)
-            .filter(
-                Conversation.user_id == user_id,
-                Conversation.context_type == ASSISTANT_CONTEXT_TYPE,
-                Conversation.status == "active",
-            )
-            .order_by(Conversation.created_at.desc())
-            .first()
-        )
-
     def close_conversation(self, conversation_id: uuid.UUID, user_id: uuid.UUID) -> None:
         conversation = self.get_conversation(conversation_id)
         if not conversation or conversation.user_id != user_id:

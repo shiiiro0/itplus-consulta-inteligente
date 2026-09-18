@@ -1,11 +1,11 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { useMemo, useState, type ChangeEvent } from 'react'
+import { useMemo, useState, type ChangeEvent, type KeyboardEvent } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Add, AdminPanelSettings, Delete, Edit, People, Person, Refresh, Search,
 } from '@mui/icons-material'
 import {
-  Alert, Box, Button, Card, CardContent, Chip, CircularProgress, Dialog, DialogActions,
+  Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions,
   DialogContent, DialogTitle, FormControl, FormControlLabel, Grid, IconButton, InputAdornment,
   InputLabel, MenuItem, Select, Stack, Switch, TextField, Tooltip, Typography,
 } from '@mui/material'
@@ -15,10 +15,20 @@ import {
 } from '../api/usuarios'
 import { SortableDataTable } from '../components/SortableDataTable'
 import PageChrome from '../components/PageChrome'
+import MetricCard from '../components/MetricCard'
+import { getErrorMessage } from '../api/client'
 import RolesPanel from './RolesPage'
 import SessionsPanel from './SessionsPanel'
 
 type EvStr = ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+
+// Antes la tab activa era solo estado local (useState) sin ningún reflejo en
+// la URL: recargar la página o compartir el link siempre volvía a
+// "Usuarios", y el botón atrás/adelante del navegador no navegaba entre
+// tabs. También eran <button> planos sin role="tablist"/"tab"/"tabpanel" ni
+// navegación con flechas — un lector de pantalla no los anunciaba como tabs.
+const TAB_KEYS = ['usuarios', 'roles', 'sesiones'] as const
+const TAB_LABELS = ['Usuarios', 'Roles y permisos', 'Sesiones']
 
 const EMPTY_CREATE: UsuarioCreate = {
   nombre: '', username: '', correo: '', password: '', rol: 'Usuario', activo: true,
@@ -42,27 +52,34 @@ function validarForm(
   return null
 }
 
-function MetricCard({ title, value, icon, color }: {
-  title: string; value: number; icon: React.ReactNode; color: string
-}) {
-  return (
-    <Card>
-      <CardContent sx={{ py: 1.5 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Box>
-            <Typography variant="caption" color="text.secondary">{title}</Typography>
-            <Typography variant="h5" sx={{ fontWeight: 700 }} color={color}>{value}</Typography>
-          </Box>
-          <Box sx={{ color, opacity: 0.85 }}>{icon}</Box>
-        </Box>
-      </CardContent>
-    </Card>
-  )
-}
-
 export default function UsuariosPage() {
   const qc = useQueryClient()
-  const [tab, setTab] = useState(0)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const initialTabIdx = TAB_KEYS.indexOf(searchParams.get('tab') as (typeof TAB_KEYS)[number])
+  const [tab, setTabState] = useState(initialTabIdx >= 0 ? initialTabIdx : 0)
+
+  const setTab = (idx: number) => {
+    setTabState(idx)
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.set('tab', TAB_KEYS[idx])
+        return next
+      },
+      { replace: true },
+    )
+  }
+
+  const handleTabKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'ArrowRight') {
+      e.preventDefault()
+      setTab((tab + 1) % TAB_LABELS.length)
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault()
+      setTab((tab - 1 + TAB_LABELS.length) % TAB_LABELS.length)
+    }
+  }
+
   const { data, isLoading, isError, refetch } = useQuery({ queryKey: ['usuarios'], queryFn: getUsuarios })
   const { data: rolesData } = useQuery({ queryKey: ['roles'], queryFn: getRoles })
   const roles = rolesData ?? ['Administrador', 'Usuario']
@@ -82,17 +99,17 @@ export default function UsuariosPage() {
   const createMut = useMutation({
     mutationFn: createUsuario,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['usuarios'] }); closeCreate() },
-    onError: (e: unknown) => setFormError((e as any)?.response?.data?.detail ?? 'Error al crear usuario.'),
+    onError: (e: unknown) => setFormError(getErrorMessage(e, 'Error al crear usuario.')),
   })
   const updateMut = useMutation({
     mutationFn: ({ id, body }: { id: string; body: UsuarioUpdate }) => updateUsuario(id, body),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['usuarios'] }); setEditUser(null); setEditConfirm(''); setFormError('') },
-    onError: (e: unknown) => setFormError((e as any)?.response?.data?.detail ?? 'Error al actualizar usuario.'),
+    onError: (e: unknown) => setFormError(getErrorMessage(e, 'Error al actualizar usuario.')),
   })
   const deleteMut = useMutation({
     mutationFn: deleteUsuario,
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['usuarios'] }); setDeleteUser(null) },
-    onError: (e: unknown) => setFormError((e as any)?.response?.data?.detail ?? 'Error al eliminar usuario.'),
+    onError: (e: unknown) => setFormError(getErrorMessage(e, 'Error al eliminar usuario.')),
   })
 
   const usuarios = data?.data ?? []
@@ -124,11 +141,22 @@ export default function UsuariosPage() {
       title="Administración"
       description="Usuarios, roles y sesiones del sistema"
     >
-      <div className="app-tabs" style={{ marginBottom: 20 }}>
-        {['Usuarios', 'Roles y permisos', 'Sesiones'].map((label, idx) => (
+      <div
+        className="app-tabs"
+        style={{ marginBottom: 20 }}
+        role="tablist"
+        aria-label="Secciones de administración"
+        onKeyDown={handleTabKeyDown}
+      >
+        {TAB_LABELS.map((label, idx) => (
           <button
             key={label}
+            id={`usuarios-tab-${TAB_KEYS[idx]}`}
             type="button"
+            role="tab"
+            aria-selected={tab === idx}
+            aria-controls={`usuarios-tabpanel-${TAB_KEYS[idx]}`}
+            tabIndex={tab === idx ? 0 : -1}
             className={`app-tab${tab === idx ? ' active' : ''}`}
             onClick={() => setTab(idx)}
           >
@@ -137,9 +165,29 @@ export default function UsuariosPage() {
         ))}
       </div>
 
-      {tab === 1 && <RolesPanel />}
-      {tab === 2 && <SessionsPanel />}
+      <div
+        id={`usuarios-tabpanel-${TAB_KEYS[1]}`}
+        role="tabpanel"
+        aria-labelledby={`usuarios-tab-${TAB_KEYS[1]}`}
+        hidden={tab !== 1}
+      >
+        {tab === 1 && <RolesPanel />}
+      </div>
+      <div
+        id={`usuarios-tabpanel-${TAB_KEYS[2]}`}
+        role="tabpanel"
+        aria-labelledby={`usuarios-tab-${TAB_KEYS[2]}`}
+        hidden={tab !== 2}
+      >
+        {tab === 2 && <SessionsPanel />}
+      </div>
 
+      <div
+        id={`usuarios-tabpanel-${TAB_KEYS[0]}`}
+        role="tabpanel"
+        aria-labelledby={`usuarios-tab-${TAB_KEYS[0]}`}
+        hidden={tab !== 0}
+      >
       {tab === 0 && (
         <>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5, flexWrap: 'wrap', gap: 1 }}>
@@ -207,6 +255,7 @@ export default function UsuariosPage() {
           )}
         </>
       )}
+      </div>
 
       <Dialog open={createOpen} onClose={closeCreate} maxWidth="sm" fullWidth>
         <DialogTitle>Nuevo usuario</DialogTitle>

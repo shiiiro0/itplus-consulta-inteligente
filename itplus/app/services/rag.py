@@ -10,10 +10,10 @@ from sqlalchemy.orm import Session
 
 from itplus.app.models.query_log import QueryLog
 from itplus.app.prompts.rag import RAG_SYSTEM_PROMPT
-from itplus.app.schemas.chat_query import QueryResponse, SourceCitation
+from itplus.app.schemas.chat_query import QueryResponse
 from itplus.app.services.llm_provider import llm_provider
 from itplus.app.services.retrieval import RetrievalService
-from itplus.app.utils.document_location import format_document_location, parse_document_location
+from itplus.app.utils.document_location import build_context_from_hits, hits_to_source_citations
 from itplus.app.utils.small_talk import is_small_talk
 
 logger = logging.getLogger(__name__)
@@ -27,14 +27,7 @@ class RAGService:
         self.retrieval = RetrievalService(db)
 
     def _build_context(self, hits: list[dict]) -> str:
-        parts: list[str] = []
-        for i, hit in enumerate(hits, 1):
-            page, sheet = parse_document_location(hit)
-            loc = format_document_location(page, sheet)
-            parts.append(
-                f"[Fuente {i}: {hit['document_name']}{loc}]\n{hit['content']}"
-            )
-        return "\n\n---\n\n".join(parts)
+        return build_context_from_hits(hits)
 
     def query(
         self,
@@ -90,19 +83,7 @@ class RAGService:
         if not answer.strip():
             answer = NO_INFO_RESPONSE
 
-        sources = []
-        for hit in hits:
-            page, sheet = parse_document_location(hit)
-            sources.append(
-                SourceCitation(
-                    document_id=hit["document_id"],
-                    document_name=hit["document_name"],
-                    excerpt=hit["content"][:300] + ("..." if len(hit["content"]) > 300 else ""),
-                    page=page,
-                    sheet=sheet,
-                    score=hit["score"],
-                )
-            )
+        sources = hits_to_source_citations(hits)
 
         latency_ms = int((time.perf_counter() - start) * 1000)
         log = self._log_query(user_id, question, answer[:500], len(sources), latency_ms)

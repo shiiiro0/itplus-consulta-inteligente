@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Callable
-
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
@@ -11,7 +9,7 @@ from sqlalchemy.orm import Session
 from itplus.app.core.database import get_db
 from itplus.app.core.security import decode_access_token
 from itplus.app.models.user import User
-from itplus.app.services.rbac import ADMIN_ROLE, get_permisos_for_role
+from itplus.app.services.rbac import ADMIN_ROLE
 from itplus.app.services import session_service
 from itplus.app.services.user_service import get_user_by_login
 
@@ -82,19 +80,3 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
-def require_permiso(modulo: str) -> Callable:
-    def _dep(
-        current_user: User = Depends(get_current_user),
-        db: Session = Depends(get_db),
-    ) -> User:
-        if current_user.rol_name.lower() == ADMIN_ROLE.lower():
-            return current_user
-        permisos = get_permisos_for_role(db, current_user.rol_name)
-        if modulo not in permisos:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"No tienes permiso para acceder al módulo '{modulo}'.",
-            )
-        return current_user
-
-    return _dep

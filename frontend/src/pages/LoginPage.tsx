@@ -60,7 +60,6 @@ export default function LoginPage() {
   const [userError, setUserError] = useState('')
   const [passError, setPassError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [forgotLoading, setForgotLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [azureLoading, setAzureLoading] = useState(false)
   const [azureBackendEnabled, setAzureBackendEnabled] = useState(false)
@@ -137,15 +136,18 @@ export default function LoginPage() {
     setView('forgot')
   }
 
-  const handleForgotSubmit = async () => {
+  const handleForgotSubmit = () => {
+    // Esto no llama a ningún API — no existe un flujo de restablecimiento
+    // automático (sin servicio de correo configurado). Antes se simulaba
+    // una llamada con un delay falso de 500ms y se mostraba "Solicitud
+    // registrada", dando la impresión de que algo se guardó en el
+    // servidor; en realidad solo se avanza a instrucciones para contactar
+    // a soporte manualmente, así que no fingimos una operación async.
     const email = forgotEmail.trim()
     if (!email) {
       shakeCard()
       return
     }
-    setForgotLoading(true)
-    await new Promise((r) => window.setTimeout(r, 500))
-    setForgotLoading(false)
     setView('forgot-sent')
   }
 
@@ -387,7 +389,7 @@ export default function LoginPage() {
 
           <div className={`login-view${view === 'forgot' ? ' active' : ''}`}>
             <p className="view-desc">
-              Ingresa tu correo y te indicaremos cómo solicitar el restablecimiento con soporte TI.
+              Aún no hay restablecimiento automático: escribe tu correo y te mostramos cómo contactar a soporte TI.
             </p>
             <div className="field has-icon">
               <label htmlFor="inp-forgot-email">
@@ -406,12 +408,10 @@ export default function LoginPage() {
             </div>
             <button
               type="button"
-              className={`btn-primary${forgotLoading ? ' loading' : ''}`}
-              disabled={forgotLoading}
+              className="btn-primary"
               onClick={handleForgotSubmit}
             >
-              <span className="spinner" />
-              <span className="btn-label">{forgotLoading ? 'Procesando…' : 'Solicitar restablecimiento'}</span>
+              <span className="btn-label">Continuar</span>
             </button>
             <div className="view-footer-links center">
               <button type="button" className="link-btn" onClick={() => setView('credentials')}>
@@ -422,9 +422,9 @@ export default function LoginPage() {
 
           <div className={`login-view${view === 'forgot-sent' ? ' active' : ''}`}>
             <div className="success-icon"><CheckIcon size={26} strokeWidth={2.4} /></div>
-            <h3 className="view-title">Solicitud registrada</h3>
+            <h3 className="view-title">Contacta a soporte TI</h3>
             <p className="view-desc center">
-              Para restablecer tu contraseña, escribe a{' '}
+              Este restablecimiento no es automático: para cambiar tu contraseña, escribe a{' '}
               <strong>soporte@itplus.cl</strong> desde <strong>{forgotEmail || 'tu correo corporativo'}</strong>.
             </p>
             <a

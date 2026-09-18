@@ -31,13 +31,23 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
+if settings.debug:
+    # Antes esto se ignoraba por completo — Swagger/ReDoc/OpenAPI quedaban
+    # públicos (sin autenticación, ver PUBLIC_PREFIXES abajo) sin importar el
+    # valor de DEBUG. Ahora sí lo apagamos si DEBUG=false.
+    logger.warning(
+        "DEBUG=true: Swagger (/api/docs) y ReDoc (/api/redoc) están "
+        "públicos sin autenticación. Define DEBUG=false en cualquier "
+        "entorno accesible fuera del equipo de desarrollo."
+    )
+
 app = FastAPI(
     title=settings.app_name,
     description="Plataforma de consulta inteligente con Asistente Gerencial, ITPlusBot y RAG",
     version="1.0.0",
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json",
+    docs_url="/api/docs" if settings.debug else None,
+    redoc_url="/api/redoc" if settings.debug else None,
+    openapi_url="/api/openapi.json" if settings.debug else None,
 )
 
 _origins_raw = os.environ.get(

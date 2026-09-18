@@ -50,6 +50,22 @@ export function getStoredUser(): {
   }
 }
 
+// Antes cada pantalla de chat (Asistente/Bot/Consulta) mostraba, ante
+// cualquier error, un mensaje genérico distinto y hardcodeado — sin mirar
+// nunca el `detail` real que ya manda el backend (p. ej. "No pudimos
+// generar una respuesta en este momento" cuando el LLM falla). Peor aún,
+// QueryPage siempre sugería "verifica que haya documentos indexados" sin
+// importar la causa real (sesión vencida, LLM caído, red, etc.), lo que
+// confunde al usuario con un diagnóstico equivocado.
+export function getErrorMessage(error: unknown, fallback: string): string {
+  if (axios.isAxiosError(error)) {
+    const detail = error.response?.data?.detail
+    if (typeof detail === 'string' && detail.trim()) return detail
+    if (!error.response) return 'No se pudo conectar con el servidor. Revisa tu conexión e intenta de nuevo.'
+  }
+  return fallback
+}
+
 const client = axios.create({
   baseURL: '/api/v1',
   headers: { 'Content-Type': 'application/json' },
@@ -260,7 +276,17 @@ export async function streamAssistantMessage(
       onError('Tu sesión expiró. Inicia sesión de nuevo.')
       return
     }
-    onError('No se pudo conectar con el asistente')
+    // Antes se mostraba siempre "No se pudo conectar con el asistente" sin
+    // importar la causa — p. ej. un 503 de LLMUnavailableError ya trae un
+    // detail específico y más útil ("Intenta de nuevo en unos segundos").
+    let detail: string | null = null
+    try {
+      const body = await res.json()
+      if (typeof body?.detail === 'string' && body.detail.trim()) detail = body.detail
+    } catch {
+      /* respuesta no-JSON o vacía: usamos el fallback genérico */
+    }
+    onError(detail ?? 'No se pudo conectar con el asistente')
     return
   }
 
