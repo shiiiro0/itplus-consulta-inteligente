@@ -23,6 +23,9 @@ Rama de trabajo: `claude/managerial-assistant-fixes-1ihttl`
 | 11 | **CSV con `;` (Chile/LatAm) rompía el pipeline** — `parse_csv` ahora usa `csv.Sniffer()` para detectar el delimitador real (`,`, `;`, tab o `\|`) en vez de asumir `,` siempre. | `4dddd3c` |
 | 12 | **XLSX/CSV: `_split_text` fusionaba filas** — ya no colapsa `\n` a espacio; solo colapsa espacios/tabs repetidos y líneas vacías consecutivas. Esto es justo lo que `document_analytics.py` (`content.split("\n")`) y `vendor_rows.py` (`re.split(r"[\n\r]+", text)`) necesitan para no fusionar cifras de filas distintas. | `4dddd3c` |
 | 13 | **`SECRET_KEY` por defecto sin validar** — `Settings` ahora falla al arrancar (`ValueError`) si `SECRET_KEY` es el valor por defecto o está vacía; si es muy corta (<16 chars) solo advierte por log (no se quiso adivinar un mínimo estricto sin poder ver el valor real). Verificado con un test aislado usando valores ficticios (no se leyó ni expuso el `.env` real en ningún momento). | `4dddd3c` |
+| 14 | **Postgres/Redis expuestos en `0.0.0.0`** — ambos puertos ahora se publican como `127.0.0.1:puerto:puerto` en `docker-compose.yml`. api/worker siguen conectándose sin problema (usan la red interna de Docker, no el puerto publicado en el host); lo único que cambia es que ya no son alcanzables desde fuera del host. | pendiente de push (ver nota) |
+| 15 | **Credenciales admin hardcodeadas sin aviso** — `seed_admin.py` ahora lee `ADMIN_EMAIL`/`ADMIN_PASSWORD` del entorno (con los mismos valores por defecto si no se definen) y loguea una advertencia explícita si detecta que se están usando los valores por defecto. Documentado en `.env.example` y en el README con aviso de que es solo para desarrollo. | pendiente de push (ver nota) |
+| 16 | **3 motores de analítica podían dar cifras distintas para la misma pregunta** — causa raíz encontrada: `document_analytics.build_analytics_context()` concatenaba *siempre* el resumen de `tabular_insights.py` (calculado con regex propios sobre texto crudo) junto con los comparativos ya calculados por CRISP o por `build_analytics()`, cada uno con instrucción de "usar exactamente esta cifra". Ahora el resumen genérico de `tabular_insights` solo se usa como *fallback* cuando no hay comparativos/tablas ya calculados — si ya existe un cálculo estructurado, ese es la única fuente de verdad que se manda al LLM. | pendiente de push (ver nota) |
 
 ### Detalle del punto 7 (control de acceso)
 - `run_itplus.py` — `ModulePermissionMiddleware` ya no deja pasar peticiones sin token, con token inválido, o hacia rutas no mapeadas: ahora responde 401.
@@ -36,12 +39,9 @@ Rama de trabajo: `claude/managerial-assistant-fixes-1ihttl`
 
 ## 🔴 Pendiente — Crítico
 
-### Confiabilidad de las cifras (toca directo el pedido original del usuario)
-- [ ] **Tres motores de analítica (CRISP-DM, `document_analytics.py`, `tabular_insights.py`) pueden calcular cifras distintas para la misma pregunta y mandar ambas al LLM en el mismo prompt**, cada una con instrucción de "usar exactamente esta cifra". *(Pendiente — requiere decidir cuál motor es la fuente de verdad o unificar cálculos; no se tocó en esta sesión.)*
+Sin ítems nuevos sin tocar en esta sesión. Los 3 puntos que estaban aquí (motores de analítica con cifras distintas, credenciales admin, Postgres/Redis expuestos) se movieron a "Hecho" (puntos 14-16) — ver notas de alcance abajo.
 
-### Seguridad / configuración
-- [ ] **Credenciales admin (`admin@itplus.cl`/`admin123`) se siembran automáticamente en cada arranque** y están documentadas en el README sin aviso de rotarlas — `seed_admin.py`, `docker-compose.yml:48`.
-- [ ] **Postgres y Redis expuestos en `0.0.0.0` sin autenticación real** si el host tiene IP pública — contraseña Postgres = usuario, Redis sin password — `docker-compose.yml:8-9,20-21`.
+**Nota de alcance sobre el punto 16 (motores de analítica):** el fix aplicado evita que se manden *dos* bloques con cifras potencialmente distintas al LLM para el mismo cálculo, pero no unifica los 3 motores en un solo pipeline de extracción — si CRISP y `build_analytics()` alguna vez corren en paralelo para la misma pregunta (no debería pasar según la lógica actual de `assistant.py`, pero no hay un test que lo garantice), seguiría existiendo la posibilidad de divergencia entre esos dos. Vale la pena un test de integración que lo verifique antes de considerar esto 100% cerrado.
 
 ---
 
@@ -94,7 +94,9 @@ Resumen agrupado (detalle completo en el historial de la conversación / se pued
 
 ## ⚠️ Nota de la sesión 2026-09-17
 
-En la máquina local (Windows) no había `git` instalado — se instaló vía `winget`. El `git push` automático a través de una shell se quedó colgado un par de veces esperando una ventana interactiva de Git Credential Manager; al tercer intento (con el usuario completando el login) terminó bien. **Confirmado con `git rev-parse HEAD` vs `git rev-parse origin/claude/managerial-assistant-fixes-1ihttl`: coinciden (`4dddd3c`)** — todos los commits de esta sesión están pusheados.
+En la máquina local (Windows) no había `git` instalado — se instaló vía `winget`. El `git push` automático a través de una shell se cuelga a veces esperando una ventana interactiva de Git Credential Manager que hay que completar manualmente; suele funcionar al reintentar una vez la sesión ya quedó cacheada. Commits de esta sesión: `1cdd1f4`, `4dddd3c`, `f2b9ee1` (confirmados pusheados) + los de los puntos 14-16 de la tabla "Hecho" (verificar con `git log origin/claude/managerial-assistant-fixes-1ihttl -1` cuál es el último).
+
+**Contenedores Docker desactualizados:** `api`/`worker` llevan corriendo semanas con la imagen vieja — ninguno de los fixes de código de esta sesión ni de la anterior está activo en producción hasta hacer `docker compose build && docker compose up -d`.
 
 ## Cómo retomar esto en una sesión nueva
 

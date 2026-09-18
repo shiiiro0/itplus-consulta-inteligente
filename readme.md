@@ -19,6 +19,8 @@ docker compose up --build
 
 **Credenciales por defecto:** `admin@itplus.cl` / `admin123`
 
+⚠️ **Solo para desarrollo local.** En producción define `ADMIN_EMAIL` y `ADMIN_PASSWORD` en tu `.env` antes del primer arranque (ver `.env.example`), o cambia la contraseña desde la UI apenas inicies sesión por primera vez. `seed_admin.py` te avisa por log si detecta que sigues usando las credenciales por defecto.
+
 ## Desarrollo local
 
 ```bash

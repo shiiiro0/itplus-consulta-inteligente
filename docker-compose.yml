@@ -6,7 +6,11 @@ services:
       POSTGRES_PASSWORD: itplus
       POSTGRES_DB: consulta_db
     ports:
-      - "5432:5432"
+      # Solo localhost: api/worker se conectan por la red interna de Docker
+      # (no necesitan este puerto publicado). Publicarlo en 0.0.0.0 expondría
+      # Postgres sin auth real (contraseña == usuario) a cualquiera que
+      # alcance este host por red, si el host tiene IP pública.
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -18,7 +22,9 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      # Mismo motivo que Postgres: sin password configurado, publicarlo en
+      # 0.0.0.0 lo dejaría abierto a cualquiera con acceso de red al host.
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s

@@ -728,9 +728,19 @@ def build_analytics_context(payload: AnalyticsPayload | None, hits: list[Connect
     """Text block for LLM: tabular summary + pre-calculated comparison figures."""
     parts: list[str] = []
 
-    tabular = build_tabular_summary(hits, question)
-    if tabular:
-        parts.append(tabular)
+    # tabular_insights.build_tabular_summary() calcula sus propios conteos con
+    # regex sobre el texto crudo, totalmente independiente de CRISP o de
+    # build_analytics() (arriba). Si ya tenemos un cálculo estructurado
+    # (comparativos o tablas ya armadas), ESE es la fuente de verdad: no
+    # agregamos el resumen genérico encima, porque puede arrojar un número
+    # distinto para la misma pregunta y el LLM recibía dos instrucciones de
+    # "usa exactamente esta cifra" que se contradicen entre sí. El resumen
+    # genérico solo se usa como fallback cuando no hay nada más preciso.
+    has_structured_payload = bool(payload and (payload.comparisons or payload.tables))
+    if not has_structured_payload:
+        tabular = build_tabular_summary(hits, question)
+        if tabular:
+            parts.append(tabular)
 
     if not payload:
         return "\n\n".join(parts)
