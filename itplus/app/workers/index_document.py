@@ -65,9 +65,23 @@ def index_document_sync(document_id: str) -> None:
 
         except Exception as exc:
             logger.error("Indexing failed for %s: %s", document_id, exc)
-            document.status = "failed"
-            document.error_message = str(exc)
-            db.commit()
+            # Si el error ocurrió a mitad de una transacción (p. ej. un commit
+            # anterior falló), la sesión queda "abortada" y cualquier commit
+            # posterior también fallaría en silencio, dejando el documento
+            # en "processing" para siempre. Hacemos rollback primero para
+            # poder registrar el fallo de forma confiable.
+            try:
+                db.rollback()
+                document.status = "failed"
+                document.error_message = str(exc)
+                db.commit()
+            except Exception as mark_failed_exc:
+                logger.error(
+                    "No se pudo marcar el documento %s como 'failed': %s",
+                    document_id,
+                    mark_failed_exc,
+                )
+                db.rollback()
     finally:
         db.close()
 

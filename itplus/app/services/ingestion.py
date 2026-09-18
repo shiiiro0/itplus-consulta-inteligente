@@ -13,7 +13,15 @@ CHUNK_OVERLAP = 100
 
 
 def _split_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
-    text = re.sub(r"\s+", " ", text).strip()
+    # Colapsamos espacios/tabs repetidos, pero preservamos los saltos de
+    # línea: vendor_rows.py y document_analytics.py usan "\n" como
+    # separador de fila/registro. Colapsar todo a un solo espacio (como
+    # hacía antes) fusionaba filas distintas en un solo bloque y producía
+    # cifras incorrectas al extraerlas con regex.
+    text = re.sub(r"[ \t\f\v]+", " ", text)
+    text = re.sub(r"[ \t]*\n[ \t]*", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    text = text.strip()
     if not text:
         return []
 
@@ -57,7 +65,16 @@ def parse_csv(file_path: str) -> list[dict]:
 
     lines: list[str] = []
     with open(file_path, encoding="utf-8", errors="ignore", newline="") as f:
-        reader = csv.reader(f)
+        sample = f.read(8192)
+        f.seek(0)
+        try:
+            # Exportaciones de Excel en configuración regional Chile/LatAm
+            # usan ";" como separador (porque "," es el separador decimal),
+            # así que no podemos asumir "," a ciegas.
+            dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
+        except csv.Error:
+            dialect = csv.excel  # fallback: "," estándar
+        reader = csv.reader(f, dialect)
         rows = list(reader)
     if not rows:
         return []

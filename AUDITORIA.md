@@ -16,7 +16,13 @@ Rama de trabajo: `claude/managerial-assistant-fixes-1ihttl`
 | 4 | `framer-motion` instalado y probado con un componente real (spring + `AnimatePresence`) contra React 19. | `3874ed1` |
 | 5 | Animación de burbujas de chat (spring), chip de fuentes con pop, follow-ups con stagger — aplica a los 3 motores vía `ChatPageShell`. | `bfc95f6` |
 | 6 | Dashboard: conteo animado en KPIs, tilt 3D en tarjetas de acceso. Historial: tab deslizante con `layoutId`. Documentos: filas con stagger, botón de subida magnético, chip de estado con pop, toast al terminar de indexar. | `2d5e8e7` |
-| 7 | **Clúster de control de acceso** (ver detalle abajo) — middleware que fallaba abierto, IDOR en ITPlusBot y Asistente Gerencial, Consulta RAG sin login. | `a222518` (local, **pendiente de push** — confirmar con el usuario) |
+| 7 | **Clúster de control de acceso** (ver detalle abajo) — middleware que fallaba abierto, IDOR en ITPlusBot y Asistente Gerencial, Consulta RAG sin login. | `a222518` — **confirmado pusheado**: `origin/claude/managerial-assistant-fixes-1ihttl` == HEAD local (verificado 2026-09-17 tras instalar git en la máquina local) |
+| 8 | `frontend/public/` (favicon, iconos, assets de marca, `diag.html`, `mobile-check.html`) nunca se había commiteado — un clone limpio se quedaba sin ellos. | `1cdd1f4` (local, **pendiente de push manual**, ver nota abajo) |
+| 9 | **Path traversal en subida de documentos** — `file.filename` ya no se usa para construir la ruta en disco; el nombre en disco ahora es siempre `{uuid}{extensión}` (extensión validada contra allowlist). También se cerró el bypass de validación cuando el archivo no tiene extensión, y ahora `ALLOWED_TYPES` sí se usa para rechazar `content_type` que no matchea ninguno de los permitidos (aceptando genéricos como `application/octet-stream`). Defensa en profundidad en `delete_document` (verifica que la ruta resuelta esté dentro de `upload_dir` antes de borrar). | local, pendiente de push |
+| 10 | **Rollback faltante en el worker de indexación** — ahora se hace `db.rollback()` antes de intentar marcar `status="failed"`, y ese segundo intento también está protegido con try/except (si falla, se loguea en vez de perder la excepción original silenciosamente). | local, pendiente de push |
+| 11 | **CSV con `;` (Chile/LatAm) rompía el pipeline** — `parse_csv` ahora usa `csv.Sniffer()` para detectar el delimitador real (`,`, `;`, tab o `\|`) en vez de asumir `,` siempre. | local, pendiente de push |
+| 12 | **XLSX/CSV: `_split_text` fusionaba filas** — ya no colapsa `\n` a espacio; solo colapsa espacios/tabs repetidos y líneas vacías consecutivas. Esto es justo lo que `document_analytics.py` (`content.split("\n")`) y `vendor_rows.py` (`re.split(r"[\n\r]+", text)`) necesitan para no fusionar cifras de filas distintas. | local, pendiente de push |
+| 13 | **`SECRET_KEY` por defecto sin validar** — `Settings` ahora falla al arrancar (`ValueError`) si `SECRET_KEY` es el valor por defecto o está vacía; si es muy corta (<16 chars) solo advierte por log (no se quiso adivinar un mínimo estricto sin poder ver el valor real). Verificado con un test aislado usando valores ficticios (no se leyó ni expuso el `.env` real en ningún momento). | local, pendiente de push |
 
 ### Detalle del punto 7 (control de acceso)
 - `run_itplus.py` — `ModulePermissionMiddleware` ya no deja pasar peticiones sin token, con token inválido, o hacia rutas no mapeadas: ahora responde 401.
@@ -30,17 +36,10 @@ Rama de trabajo: `claude/managerial-assistant-fixes-1ihttl`
 
 ## 🔴 Pendiente — Crítico
 
-### Manejo de archivos
-- [ ] **Path traversal en subida de documentos** — `itplus/app/api/v1/documents.py:79-83`. `file.filename` se usa sin sanitizar para construir la ruta en disco (`f"{doc_id}_{file.filename}"`). Un nombre con `/` y `..` puede escribir fuera de `upload_dir`. Además la validación de extensión se salta completo si el archivo no tiene extensión (`if suffix and ...`, línea 63). `ALLOWED_TYPES` está definido pero nunca se usa para validar `content_type` real.
-- [ ] **Sin rollback en el worker de indexación** — `itplus/app/workers/index_document.py:33-70`. Si el primer `db.commit()` falla, la sesión queda en transacción abortada y el segundo `db.commit()` (marcando `status="failed"`) también falla sin capturarse — el documento queda "processing" para siempre, invisible y sin error.
-
 ### Confiabilidad de las cifras (toca directo el pedido original del usuario)
-- [ ] **CSV con `;` (exportación de Excel Chile/LatAm) rompe todo el pipeline** — `itplus/app/services/ingestion.py:56-60`. Sin `csv.Sniffer`, cada fila se lee como una sola columna. Los extractores de `vendor_rows.py`/`document_analytics.py` descartan todas las filas silenciosamente.
-- [ ] **XLSX: `_split_text` colapsa saltos de línea antes de trocear** — `ingestion.py:16` usado desde `parse_xlsx` (línea 109-110). Corta filas a mitad, y los valores del regex de extracción (que usa `\n` como terminador) se fusionan con la fila siguiente → cifras incorrectas presentadas como "exactas" al LLM.
-- [ ] **Tres motores de analítica (CRISP-DM, `document_analytics.py`, `tabular_insights.py`) pueden calcular cifras distintas para la misma pregunta y mandar ambas al LLM en el mismo prompt**, cada una con instrucción de "usar exactamente esta cifra".
+- [ ] **Tres motores de analítica (CRISP-DM, `document_analytics.py`, `tabular_insights.py`) pueden calcular cifras distintas para la misma pregunta y mandar ambas al LLM en el mismo prompt**, cada una con instrucción de "usar exactamente esta cifra". *(Pendiente — requiere decidir cuál motor es la fuente de verdad o unificar cálculos; no se tocó en esta sesión.)*
 
 ### Seguridad / configuración
-- [ ] **`SECRET_KEY` por defecto `"change-me-in-production"` sin validación al arranque** — `itplus/app/core/config.py:16`. Si falta la variable de entorno, cualquiera puede forjar un JWT de administrador.
 - [ ] **Credenciales admin (`admin@itplus.cl`/`admin123`) se siembran automáticamente en cada arranque** y están documentadas en el README sin aviso de rotarlas — `seed_admin.py`, `docker-compose.yml:48`.
 - [ ] **Postgres y Redis expuestos en `0.0.0.0` sin autenticación real** si el host tiene IP pública — contraseña Postgres = usuario, Redis sin password — `docker-compose.yml:8-9,20-21`.
 
@@ -50,7 +49,7 @@ Rama de trabajo: `claude/managerial-assistant-fixes-1ihttl`
 
 **Documentos / archivos**
 - [ ] Borrar/reindexar documentos no verifica dueño ni rol adicional — cualquier usuario con acceso al módulo "documentos" puede borrar documentos de otros (`documents.py:123-157`). *(Puede ser diseño intencional de base de conocimiento compartida — confirmar con el usuario antes de restringir.)*
-- [ ] Validación de tipo de archivo evadible (sin nombre → sin chequeo de extensión; sin verificación de magic bytes).
+- [ ] Validación de tipo de archivo evadible: el bypass "sin extensión" y el `content_type` sin usar ya se arreglaron (ver tabla "Hecho", punto 9); **sigue faltando verificación real de magic bytes** (un `.pdf` con contenido arbitrario dentro sigue pasando si la extensión y el content-type declarado coinciden).
 - [ ] Lectura completa del archivo en memoria antes de validar tamaño máximo (riesgo de agotar memoria).
 - [ ] Archivos `.duckdb`/`_import.csv` del análisis CRISP nunca se limpian al borrar el documento — fuga de disco.
 - [ ] Race condition en reindexado concurrente (doble clic → chunks duplicados o borrados a medias).
@@ -92,6 +91,10 @@ Resumen agrupado (detalle completo en el historial de la conversación / se pued
 - **Otros**: `Claude Setup.exe` (6.7 MB) sigue commiteado en la raíz sin ningún propósito; Swagger/ReDoc siempre públicos en cualquier entorno; `settings.debug` no hace nada (decorativo); enumeración de usuarios por canal lateral de tiempo en `/auth/login`; política de contraseñas inexistente (sin longitud mínima).
 
 ---
+
+## ⚠️ Nota de la sesión 2026-09-17
+
+En la máquina local (Windows) no había `git` instalado — se instaló vía `winget`. El `git push` automático a través de una shell se queda colgado esperando una ventana interactiva de Git Credential Manager que el agente no puede completar. **Los commits de esta sesión quedaron listos localmente pero sin pushear** — hay que hacer `git push origin claude/managerial-assistant-fixes-1ihttl` manualmente (por ejemplo desde GitHub Desktop, que ya tiene sesión iniciada como `shiiiro0`) y luego confirmar con `git log origin/claude/managerial-assistant-fixes-1ihttl -1`.
 
 ## Cómo retomar esto en una sesión nueva
 

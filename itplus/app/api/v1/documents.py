@@ -25,10 +25,19 @@ ALLOWED_TYPES = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "application/vnd.ms-excel",
+    "application/vnd.ms-excel.sheet.macroEnabled.12",
     "text/plain",
     "text/markdown",
     "text/csv",
+    "application/csv",
 }
+
+# Muchos navegadores/clientes HTTP mandan un content-type genérico (o vacío)
+# en vez del real. No lo rechazamos —igual la extensión ya se validó arriba—
+# pero sí rechazamos un content-type reconocido que no coincide con ninguno
+# de los permitidos (p. ej. subir un .exe renombrado a .pdf con
+# "application/x-msdownload").
+GENERIC_CONTENT_TYPES = {"application/octet-stream", ""}
 
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md", ".csv", ".xlsx", ".xlsm"}
 
@@ -59,8 +68,12 @@ async def upload_document(
     if not file.filename:
         raise HTTPException(status_code=400, detail="Nombre de archivo requerido")
 
-    suffix = Path(file.filename).suffix.lower()
-    if suffix and suffix not in ALLOWED_EXTENSIONS:
+    # Solo nos importa la extensión del nombre original para validarla; el
+    # nombre en sí nunca se usa para construir la ruta en disco (ver abajo),
+    # así que un ".." o "/" en file.filename no puede escapar de upload_dir.
+    original_name = Path(file.filename).name
+    suffix = Path(original_name).suffix.lower()
+    if not original_name or suffix not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
             detail=f"Formato no soportado. Usa: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
@@ -75,9 +88,21 @@ async def upload_document(
         )
 
     mime_type = file.content_type or "application/octet-stream"
+    if mime_type not in ALLOWED_TYPES and mime_type not in GENERIC_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Tipo de contenido no permitido: {mime_type}",
+        )
+
     doc_id = uuid.uuid4()
-    safe_name = f"{doc_id}_{file.filename}"
-    storage_path = upload_dir / safe_name
+    # El nombre en disco se deriva únicamente del UUID que generamos y de una
+    # extensión ya validada contra ALLOWED_EXTENSIONS — nunca del nombre que
+    # manda el cliente — para eliminar cualquier posibilidad de path traversal.
+    safe_name = f"{doc_id}{suffix}"
+    storage_path = (upload_dir / safe_name).resolve()
+    if storage_path.parent != upload_dir.resolve():
+        # Defensa en profundidad: no debería poder pasar, pero si pasa, cortamos.
+        raise HTTPException(status_code=400, detail="Ruta de archivo inválida")
 
     with open(storage_path, "wb") as f:
         f.write(content)
@@ -88,7 +113,7 @@ async def upload_document(
 
     document = Document(
         id=doc_id,
-        filename=file.filename,
+        filename=original_name,
         mime_type=mime_type,
         storage_path=str(storage_path),
         status="pending",
@@ -149,8 +174,10 @@ def delete_document(
     if not document:
         raise HTTPException(status_code=404, detail="Documento no encontrado")
 
-    storage = Path(document.storage_path)
-    if storage.exists():
+    settings = get_settings()
+    upload_dir = Path(settings.upload_dir).resolve()
+    storage = Path(document.storage_path).resolve()
+    if storage.parent == upload_dir and storage.exists():
         storage.unlink()
 
     db.delete(document)

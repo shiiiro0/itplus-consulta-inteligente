@@ -1,8 +1,14 @@
 """Application configuration from environment variables."""
 
+import logging
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
+
+_DEFAULT_SECRET_KEY = "change-me-in-production"
 
 
 class Settings(BaseSettings):
@@ -13,7 +19,7 @@ class Settings(BaseSettings):
     )
 
     app_name: str = "ITPlus Consulta Inteligente"
-    secret_key: str = "change-me-in-production"
+    secret_key: str = _DEFAULT_SECRET_KEY
     debug: bool = True
 
     database_url: str = "postgresql://itplus:itplus@localhost:5432/consulta_db"
@@ -44,6 +50,29 @@ class Settings(BaseSettings):
     api_token_expire_hours: int = 24
     sessions_idle_minutes: int = 30
     sessions_retention_months: int = 6
+
+    @model_validator(mode="after")
+    def _validate_secret_key(self) -> "Settings":
+        # Con el valor por defecto, cualquiera puede leer el código fuente
+        # (o adivinarlo) y forjar un JWT de administrador válido. Fallamos
+        # al arranque en vez de dejar la app corriendo insegura en silencio.
+        if self.secret_key == _DEFAULT_SECRET_KEY or not self.secret_key.strip():
+            raise ValueError(
+                "SECRET_KEY no está configurada (o usa el valor por defecto "
+                f"'{_DEFAULT_SECRET_KEY}'). Define una SECRET_KEY única y "
+                "secreta en el entorno o en el .env antes de arrancar la app."
+            )
+        if len(self.secret_key) < 16:
+            # No bloqueamos el arranque por esto (no queremos adivinar
+            # requisitos de longitud sin conocer el valor real), pero sí
+            # avisamos fuerte: un SECRET_KEY corto es más fácil de forzar
+            # por fuerza bruta.
+            logger.warning(
+                "SECRET_KEY tiene menos de 16 caracteres — se recomienda "
+                "usar una clave más larga y aleatoria (p. ej. "
+                "`openssl rand -hex 32`)."
+            )
+        return self
 
 
 @lru_cache
