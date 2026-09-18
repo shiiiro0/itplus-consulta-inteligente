@@ -241,7 +241,18 @@ def list_chats(
     user_id: uuid.UUID,
     chat_type: str | None = None,
     limit: int = 50,
-) -> list[dict]:
+    offset: int = 0,
+) -> tuple[list[dict], int]:
+    """Devuelve (página de chats, total real de chats del usuario).
+
+    Antes esta función truncaba las conversaciones/logs *antes* de fusionar
+    y deduplicar (con `.limit(limit * 2)` / `.limit(limit * 3)`), y el
+    endpoint reportaba `total = len(items_ya_truncados)` — un usuario con
+    más chats que ese límite interno veía un total incorrecto y no había
+    forma de pedir la página siguiente. Ahora se trae todo, se fusiona/
+    dedupe/ordena, y la paginación (offset/limit) se aplica al final sobre
+    la lista ya completa, así el total es real.
+    """
     _consolidate_active_assistant_sessions(db, user_id)
 
     items: list[dict] = []
@@ -250,7 +261,6 @@ def list_chats(
         db.query(Conversation)
         .filter(Conversation.user_id == user_id)
         .order_by(Conversation.created_at.desc())
-        .limit(limit * 2)
     )
     conversations = conv_query.all()
 
@@ -300,7 +310,6 @@ def list_chats(
                 (QueryLog.chat_type == "consulta") | (QueryLog.chat_type.is_(None)),
             )
             .order_by(QueryLog.created_at.desc())
-            .limit(limit * 3)
             .all()
         )
         items.extend(_group_consulta_logs(logs))
@@ -312,7 +321,8 @@ def list_chats(
         items = _dedupe_consulta_against_assistant(items)
 
     items.sort(key=lambda x: x["updated_at"] or x["created_at"], reverse=True)
-    return items[:limit]
+    total = len(items)
+    return items[offset : offset + limit], total
 
 
 def get_consulta_detail(db: Session, log_id: uuid.UUID, user_id: uuid.UUID) -> dict | None:

@@ -82,6 +82,9 @@ def _migrate_conversations_table() -> None:
         conn.commit()
 
 
+_INIT_DB_LOCK_KEY = 727384910  # arbitrario, solo necesita ser estable entre procesos
+
+
 def init_db() -> None:
     """Create tables, enable pgvector, seed RBAC."""
     from itplus.app.models import (  # noqa: F401
@@ -94,23 +97,35 @@ def init_db() -> None:
         user_session,
     )
 
-    with engine.connect() as conn:
-        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        conn.commit()
-
-    Base.metadata.create_all(bind=engine)
-    _migrate_users_table()
-    _migrate_documents_table()
-    _migrate_query_logs_table()
-    _migrate_conversations_table()
-
-    db = SessionLocal()
+    # init_db() se llama 2 veces por arranque de cada instancia (una vez
+    # desde seed_admin.py, otra desde el evento startup de FastAPI), y con
+    # más de un replica/contenedor arrancando a la vez, las migraciones a
+    # mano (ALTER TABLE IF NOT EXISTS, cada una en su propia transacción, sin
+    # coordinación entre sí) pueden ejecutarse en paralelo. Un advisory lock
+    # de Postgres serializa esas ejecuciones sin necesitar Alembic todavía.
+    lock_conn = engine.connect()
+    lock_conn.execute(text("SELECT pg_advisory_lock(:key)"), {"key": _INIT_DB_LOCK_KEY})
     try:
-        from itplus.app.services.rbac import seed_rbac
-        from itplus.app.services import session_service, settings_service
+        with engine.connect() as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            conn.commit()
 
-        seed_rbac(db)
-        months = settings_service.get_int(db, "sessions_retention_months")
-        session_service.purge_old_sessions(db, months)
+        Base.metadata.create_all(bind=engine)
+        _migrate_users_table()
+        _migrate_documents_table()
+        _migrate_query_logs_table()
+        _migrate_conversations_table()
+
+        db = SessionLocal()
+        try:
+            from itplus.app.services.rbac import seed_rbac
+            from itplus.app.services import session_service, settings_service
+
+            seed_rbac(db)
+            months = settings_service.get_int(db, "sessions_retention_months")
+            session_service.purge_old_sessions(db, months)
+        finally:
+            db.close()
     finally:
-        db.close()
+        lock_conn.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": _INIT_DB_LOCK_KEY})
+        lock_conn.close()

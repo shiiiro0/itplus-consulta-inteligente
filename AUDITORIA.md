@@ -23,9 +23,22 @@ Rama de trabajo: `claude/managerial-assistant-fixes-1ihttl`
 | 11 | **CSV con `;` (Chile/LatAm) rompía el pipeline** — `parse_csv` ahora usa `csv.Sniffer()` para detectar el delimitador real (`,`, `;`, tab o `\|`) en vez de asumir `,` siempre. | `4dddd3c` |
 | 12 | **XLSX/CSV: `_split_text` fusionaba filas** — ya no colapsa `\n` a espacio; solo colapsa espacios/tabs repetidos y líneas vacías consecutivas. Esto es justo lo que `document_analytics.py` (`content.split("\n")`) y `vendor_rows.py` (`re.split(r"[\n\r]+", text)`) necesitan para no fusionar cifras de filas distintas. | `4dddd3c` |
 | 13 | **`SECRET_KEY` por defecto sin validar** — `Settings` ahora falla al arrancar (`ValueError`) si `SECRET_KEY` es el valor por defecto o está vacía; si es muy corta (<16 chars) solo advierte por log (no se quiso adivinar un mínimo estricto sin poder ver el valor real). Verificado con un test aislado usando valores ficticios (no se leyó ni expuso el `.env` real en ningún momento). | `4dddd3c` |
-| 14 | **Postgres/Redis expuestos en `0.0.0.0`** — ambos puertos ahora se publican como `127.0.0.1:puerto:puerto` en `docker-compose.yml`. api/worker siguen conectándose sin problema (usan la red interna de Docker, no el puerto publicado en el host); lo único que cambia es que ya no son alcanzables desde fuera del host. | pendiente de push (ver nota) |
-| 15 | **Credenciales admin hardcodeadas sin aviso** — `seed_admin.py` ahora lee `ADMIN_EMAIL`/`ADMIN_PASSWORD` del entorno (con los mismos valores por defecto si no se definen) y loguea una advertencia explícita si detecta que se están usando los valores por defecto. Documentado en `.env.example` y en el README con aviso de que es solo para desarrollo. | pendiente de push (ver nota) |
-| 16 | **3 motores de analítica podían dar cifras distintas para la misma pregunta** — causa raíz encontrada: `document_analytics.build_analytics_context()` concatenaba *siempre* el resumen de `tabular_insights.py` (calculado con regex propios sobre texto crudo) junto con los comparativos ya calculados por CRISP o por `build_analytics()`, cada uno con instrucción de "usar exactamente esta cifra". Ahora el resumen genérico de `tabular_insights` solo se usa como *fallback* cuando no hay comparativos/tablas ya calculados — si ya existe un cálculo estructurado, ese es la única fuente de verdad que se manda al LLM. | pendiente de push (ver nota) |
+| 14 | **Postgres/Redis expuestos en `0.0.0.0`** — ambos puertos ahora se publican como `127.0.0.1:puerto:puerto` en `docker-compose.yml`. api/worker siguen conectándose sin problema (usan la red interna de Docker, no el puerto publicado en el host); lo único que cambia es que ya no son alcanzables desde fuera del host. | `62c5300` |
+| 15 | **Credenciales admin hardcodeadas sin aviso** — `seed_admin.py` ahora lee `ADMIN_EMAIL`/`ADMIN_PASSWORD` del entorno (con los mismos valores por defecto si no se definen) y loguea una advertencia explícita si detecta que se están usando los valores por defecto. Documentado en `.env.example` y en el README con aviso de que es solo para desarrollo. | `62c5300` |
+| 16 | **3 motores de analítica podían dar cifras distintas para la misma pregunta** — causa raíz encontrada: `document_analytics.build_analytics_context()` concatenaba *siempre* el resumen de `tabular_insights.py` (calculado con regex propios sobre texto crudo) junto con los comparativos ya calculados por CRISP o por `build_analytics()`, cada uno con instrucción de "usar exactamente esta cifra". Ahora el resumen genérico de `tabular_insights` solo se usa como *fallback* cuando no hay comparativos/tablas ya calculados — si ya existe un cálculo estructurado, ese es la única fuente de verdad que se manda al LLM. | `62c5300` |
+| 17 | **Documentos**: lectura del upload en chunks respetando el límite de tamaño (ya no carga el archivo completo en memoria antes de validar); verificación de "magic bytes" contra la extensión (sin dependencias nuevas — detecta un binario renombrado como `.pdf`/`.docx`/etc., o un `.txt`/`.csv` que en realidad es binario); la categoría se valida *antes* de escribir el archivo a disco (ya no queda huérfano); `reindex` devuelve 409 si el documento ya está `pending`/`processing` (evita el doble-clic → chunks duplicados); el `.duckdb` y el `_import.csv` temporal de CRISP ahora se borran al borrar el documento (antes nunca se limpiaban). | pendiente de push (ver nota) |
+| 18 | **ITPlusBot sin manejo de errores del LLM** — si el proveedor (Groq) falla, ahora se hace commit del mensaje del usuario (antes se perdía al hacer rollback implícito) y se devuelve un 503 explícito (`LLMUnavailableError`) en vez de un 500 genérico. | pendiente de push (ver nota) |
+| 19 | **Sin timeout en las llamadas al proveedor LLM** — nuevo setting `AI_TIMEOUT_SECONDS` (default 60s) pasado al cliente OpenAI SDK; antes una llamada colgada podía agotar el pool de threads de la API. | pendiente de push (ver nota) |
+| 20 | **Resumen con error se quedaba así para siempre** — si el LLM falla generando el resumen, ya no se persiste un `Summary` con el mensaje de error dentro (eso bloqueaba cualquier reintento futuro, porque el chequeo de "ya existe" lo trataba como válido); ahora no se guarda nada y la próxima llamada a `generate_summary()` lo vuelve a intentar de verdad. | pendiente de push (ver nota) |
+| 21 | **Historial sin paginación real** — `history_service.list_chats()` ya no trunca conversaciones/logs *antes* de fusionar/deduplicar; ahora fusiona todo, calcula el `total` real, y aplica `offset`/`limit` al final. El endpoint `/history/chats` acepta `limit`/`offset`. Esto también corrige el contador de chats mostrado en el Dashboard (`history.total`), que antes subestimaba a cualquier usuario con más chats que el límite interno. | pendiente de push (ver nota) |
+| 22 | **Sin React Error Boundary** — nuevo `components/ErrorBoundary.tsx` envolviendo toda la app en `App.tsx`; un error de render ya no deja pantalla en blanco total, muestra una pantalla de recuperación con botón "Volver al inicio". | pendiente de push (ver nota) |
+| 23 | **`AuthContext` no limpiaba el `user` en memoria** — si `getMe()` fallaba al arrancar, ahora se llama `setUser(null)` además de `clearAuth()`; antes la UI seguía mostrando la sesión como válida con el token ya invalidado. | pendiente de push (ver nota) |
+| 24 | **`streamAssistantMessage` no pasaba por el interceptor de 401** — usa `fetch()` manual (necesario para SSE) que no pasa por axios; ahora detecta un 401 explícitamente y hace el mismo `clearAuth()` + redirect a `/login?expired=1` que el resto de la app, en vez de mostrar "no se pudo conectar". | pendiente de push (ver nota) |
+| 25 | **`itplus/requirements.txt` no tenía `duckdb`** — ahora coincide con el `requirements.txt` de la raíz; el análisis CRISP de documentos tabulares ya no rompe en un setup local sin Docker. | pendiente de push (ver nota) |
+| 26 | **`init_db()` sin lock ante arranques concurrentes** — se llama 2 veces por instancia (`seed_admin.py` + evento `startup`) y las migraciones a mano (`ALTER TABLE IF NOT EXISTS`) podían pisarse entre réplicas. Ahora `init_db()` toma un `pg_advisory_lock` de Postgres al inicio y lo libera al final, serializando la inicialización entre procesos. *(No se migró a Alembic todavía — sigue pendiente si se quiere un sistema de migraciones real.)* | pendiente de push (ver nota) |
+| 27 | **Sin `healthcheck`/`restart` en `api`/`worker`/`frontend`** — los 5 servicios de `docker-compose.yml` ahora tienen `restart: unless-stopped`; `api` chequea `/api/v1/health`, `worker` usa `celery inspect ping`, `frontend` usa `wget --spider` contra nginx. | pendiente de push (ver nota) |
+| 28 | **`nginx.conf` sin `client_max_body_size`** — ahora en 25m (por encima de `MAX_UPLOAD_MB=20` default); antes cualquier archivo >1MB detrás de nginx en producción daba 413 aunque en desarrollo funcionara. | pendiente de push (ver nota) |
+| 29 | **Sin `.dockerignore` en la raíz** — nuevo `.dockerignore` excluyendo `.git/`, `uploads/`, `node_modules/`, `.env`, instaladores `.exe` sueltos, etc. del contexto de build (`context: .` en `docker-compose.yml` lo mandaba todo antes). | pendiente de push (ver nota) |
 
 ### Detalle del punto 7 (control de acceso)
 - `run_itplus.py` — `ModulePermissionMiddleware` ya no deja pasar peticiones sin token, con token inválido, o hacia rutas no mapeadas: ahora responde 401.
@@ -47,35 +60,14 @@ Sin ítems nuevos sin tocar en esta sesión. Los 3 puntos que estaban aquí (mot
 
 ## 🟠 Pendiente — Alto
 
-**Documentos / archivos**
-- [ ] Borrar/reindexar documentos no verifica dueño ni rol adicional — cualquier usuario con acceso al módulo "documentos" puede borrar documentos de otros (`documents.py:123-157`). *(Puede ser diseño intencional de base de conocimiento compartida — confirmar con el usuario antes de restringir.)*
-- [ ] Validación de tipo de archivo evadible: el bypass "sin extensión" y el `content_type` sin usar ya se arreglaron (ver tabla "Hecho", punto 9); **sigue faltando verificación real de magic bytes** (un `.pdf` con contenido arbitrario dentro sigue pasando si la extensión y el content-type declarado coinciden).
-- [ ] Lectura completa del archivo en memoria antes de validar tamaño máximo (riesgo de agotar memoria).
-- [ ] Archivos `.duckdb`/`_import.csv` del análisis CRISP nunca se limpian al borrar el documento — fuga de disco.
-- [ ] Race condition en reindexado concurrente (doble clic → chunks duplicados o borrados a medias).
-- [ ] Categoría inválida deja el archivo huérfano en disco (se valida después de escribirlo).
+Todo lo que estaba listado aquí se resolvió en esta sesión (ver puntos 17-29 en "Hecho"), **excepto**:
 
-**Chat / LLM**
-- [ ] ITPlusBot sin manejo de errores del LLM — si Groq falla, se pierde el mensaje del usuario y da 500 (`conversation.py:241`).
-- [ ] Sin timeout configurado en las llamadas al proveedor LLM — puede agotar el pool de threads de toda la API bajo carga (`llm_provider.py`).
-- [ ] Generación de resúmenes: si el LLM falla, el placeholder de error queda para siempre como "el resumen" (nunca se reintenta) — `summary.py:29-38`.
-- [ ] Condición de carrera al mandar 2 mensajes rápido a la misma conversación (respuestas que no se ven entre sí).
-- [ ] Streaming: una respuesta cortada a mitad se persiste como si fuera completa, sin indicárselo al cliente — `assistant.py:436-457`.
-- [ ] Historial sin paginación real; `total` no refleja el total real de chats del usuario — `history.py:25-40`.
-
-**Frontend**
-- [ ] **Sin ningún React Error Boundary** — un error de render después del arranque deja pantalla en blanco total sin recuperación.
-- [ ] `AuthContext.tsx:52` — si `getMe()` falla al arrancar, se limpia `localStorage` pero no el estado `user` en memoria → UI sigue mostrando sesión inválida.
-- [ ] `streamAssistantMessage` usa `fetch()` manual que no pasa por el interceptor de 401 del cliente axios — token expirado durante streaming da "no se pudo conectar" en vez de redirigir a login.
-- [ ] Llamadas API duplicadas en cada navegación (`Layout.tsx` no usa react-query, a diferencia de Roles/Usuarios/Sesiones que sí).
-- [ ] JWT en `localStorage` sin CSP definido.
-
-**Infraestructura**
-- [ ] Los dos `requirements.txt` divergen — falta `duckdb` en `itplus/requirements.txt`, que es el que usa el README para desarrollo local sin Docker → rompe justo el análisis de documentos.
-- [ ] `alembic` instalado pero nunca usado — migraciones a mano con `ALTER TABLE IF NOT EXISTS` sin lock, riesgo de condición de carrera en arranques concurrentes (`init_db()` se llama 2 veces por arranque: desde `seed_admin.py` y desde el evento `startup`).
-- [ ] Sin `healthcheck`/`restart` en los contenedores `api`/`worker`/`frontend` — si `init_db()` falla, el contenedor muere y nadie lo reinicia.
-- [ ] `nginx.conf` sin `client_max_body_size` — subir un archivo >1MB en producción (detrás de nginx) da 413, aunque en desarrollo funcione.
-- [ ] Sin `.dockerignore` en la raíz — el de `frontend/` no aplica a los builds reales (`context: .`), puede terminar copiando `.git/`, `uploads/`, `Claude Setup.exe` al contexto de build.
+- [ ] **Borrar/reindexar documentos no verifica dueño ni rol adicional** — cualquier usuario con acceso al módulo "documentos" puede borrar documentos de otros (`documents.py`). *(Es una decisión de producto, no un bug: puede ser diseño intencional de base de conocimiento compartida — confirmar con el usuario antes de restringir.)*
+- [ ] Condición de carrera al mandar 2 mensajes rápido a la misma conversación (respuestas que no se ven entre sí). *(No tocado — requiere pensar en un lock por conversación o deduplicar en el frontend.)*
+- [ ] Streaming: una respuesta cortada a mitad se persiste como si fuera completa, sin indicárselo al cliente — `assistant.py:436-457`. *(No tocado.)*
+- [ ] Llamadas API duplicadas en cada navegación (`Layout.tsx` no usa react-query, a diferencia de Roles/Usuarios/Sesiones que sí). *(No tocado.)*
+- [ ] JWT en `localStorage` sin CSP definido. *(No tocado — requiere definir una política de CSP a nivel de nginx/index.html.)*
+- [ ] `alembic` instalado pero nunca usado — el punto 26 (advisory lock) mitiga la condición de carrera concreta, pero no migra el proyecto a un sistema de migraciones real con versionado. *(Alcance mayor, no abordado.)*
 
 ---
 
@@ -94,9 +86,11 @@ Resumen agrupado (detalle completo en el historial de la conversación / se pued
 
 ## ⚠️ Nota de la sesión 2026-09-17
 
-En la máquina local (Windows) no había `git` instalado — se instaló vía `winget`. El `git push` automático a través de una shell se cuelga a veces esperando una ventana interactiva de Git Credential Manager que hay que completar manualmente; suele funcionar al reintentar una vez la sesión ya quedó cacheada. Commits de esta sesión: `1cdd1f4`, `4dddd3c`, `f2b9ee1` (confirmados pusheados) + los de los puntos 14-16 de la tabla "Hecho" (verificar con `git log origin/claude/managerial-assistant-fixes-1ihttl -1` cuál es el último).
+En la máquina local (Windows) no había `git` instalado — se instaló vía `winget`. El `git push` automático a través de una shell se cuelga a veces esperando una ventana interactiva de Git Credential Manager que hay que completar manualmente; suele funcionar al reintentar una vez la sesión ya quedó cacheada. Commits confirmados pusheados de la primera ronda: `1cdd1f4`, `4dddd3c`, `f2b9ee1`, `62c5300` (puntos 1-16 de "Hecho"). Los puntos 17-29 (segunda ronda, ítems 🟠 Alto) quedaron committeados localmente — **verificar con `git log origin/claude/managerial-assistant-fixes-1ihttl -1` cuál es el último commit real en remoto** y actualizar esta tabla con el hash correcto.
 
-**Contenedores Docker desactualizados:** `api`/`worker` llevan corriendo semanas con la imagen vieja — ninguno de los fixes de código de esta sesión ni de la anterior está activo en producción hasta hacer `docker compose build && docker compose up -d`.
+**Verificación de esta ronda:** todo el backend tocado pasa `python -m py_compile`; el frontend tocado pasa `tsc --noEmit` y `eslint` sin errores nuevos (los 2 errores de lint preexistentes en `AuthContext.tsx` no son de esta sesión); `docker compose config` valida el `docker-compose.yml` actualizado. No se corrieron tests de integración reales (requieren levantar los contenedores) — recomendable antes de considerar esto verificado en caliente.
+
+**Contenedores Docker desactualizados:** `api`/`worker`/`frontend` llevan corriendo semanas con la imagen vieja — ninguno de los fixes de código de esta sesión ni de las anteriores está activo en producción hasta hacer `docker compose build && docker compose up -d`. Con los healthchecks nuevos (punto 27), conviene hacer ese rebuild pronto para validarlos también.
 
 ## Cómo retomar esto en una sesión nueva
 

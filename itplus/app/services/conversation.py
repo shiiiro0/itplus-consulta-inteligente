@@ -26,6 +26,10 @@ logger = logging.getLogger(__name__)
 DEFAULT_BOT_CATEGORY = "soporte"
 
 
+class LLMUnavailableError(RuntimeError):
+    """El proveedor LLM falló. El mensaje del usuario ya quedó guardado."""
+
+
 @dataclass
 class BotTurnResult:
     conversation: Conversation
@@ -243,7 +247,18 @@ class ConversationService:
         all_messages = self.get_messages(conversation.id)
         llm_messages = self._build_llm_messages(all_messages, message, context_block, user_msg.id)
 
-        assistant_response = llm_provider.chat_completion(llm_messages, temperature=0.25)
+        try:
+            assistant_response = llm_provider.chat_completion(llm_messages, temperature=0.25)
+        except Exception as exc:
+            # Si el LLM falla, igual guardamos el mensaje del usuario (ya
+            # estaba flush()eado, pero sin este commit se perdía al cerrar la
+            # sesión sin haber confirmado la transacción) y devolvemos un
+            # error específico en vez de dejar que se propague un 500 genérico.
+            logger.error("ITPlusBot: fallo la llamada al LLM: %s", exc)
+            self.db.commit()
+            raise LLMUnavailableError(
+                "No pudimos generar una respuesta en este momento. Intenta de nuevo en unos segundos."
+            ) from exc
         sources = self._hits_to_sources(hits)
 
         assistant_msg = Message(

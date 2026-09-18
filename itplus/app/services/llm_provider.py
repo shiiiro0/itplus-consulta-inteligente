@@ -29,7 +29,11 @@ class LLMProvider:
                 base_url = base_url or "http://localhost:11434/v1"
                 api_key = "ollama"
 
-            self._client = OpenAI(base_url=base_url, api_key=api_key)
+            self._client = OpenAI(
+                base_url=base_url,
+                api_key=api_key,
+                timeout=self.settings.ai_timeout_seconds,
+            )
         return self._client
 
     def chat_completion(

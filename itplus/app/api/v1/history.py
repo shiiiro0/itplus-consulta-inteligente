@@ -28,15 +28,19 @@ def list_chats(
         default=None,
         description="Filtrar: asistente, bot, consulta",
     ),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     if chat_type and chat_type not in history_service.CHAT_TYPES:
         raise HTTPException(status_code=400, detail="Tipo de chat inválido")
-    items = history_service.list_chats(db, current_user.id, chat_type=chat_type)
+    items, total = history_service.list_chats(
+        db, current_user.id, chat_type=chat_type, limit=limit, offset=offset
+    )
     return ChatHistoryListResponse(
         items=[ChatHistoryItem.model_validate(i) for i in items],
-        total=len(items),
+        total=total,
     )
 
 

@@ -248,6 +248,18 @@ export async function streamAssistantMessage(
   })
 
   if (!res.ok) {
+    // Este endpoint usa fetch() manual (necesario para leer el stream SSE),
+    // así que no pasa por el interceptor de 401 de axios de arriba. Sin este
+    // chequeo, un token vencido durante el streaming mostraba "no se pudo
+    // conectar" en vez de redirigir a login como en el resto de la app.
+    if (res.status === 401) {
+      clearAuth()
+      if (!window.location.pathname.startsWith('/login')) {
+        window.location.href = '/login?expired=1'
+      }
+      onError('Tu sesión expiró. Inicia sesión de nuevo.')
+      return
+    }
     onError('No se pudo conectar con el asistente')
     return
   }

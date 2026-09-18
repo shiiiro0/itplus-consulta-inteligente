@@ -49,7 +49,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setAuth(token, info)
         setUser(info)
       })
-      .catch(() => clearAuth())
+      .catch(() => {
+        // Antes solo se limpiaba localStorage (clearAuth) pero el estado
+        // `user` en memoria seguía con el valor viejo de `stored` — la UI
+        // seguía mostrando la sesión como válida aunque el token ya no
+        // sirviera, hasta que algo más forzara un refresh.
+        clearAuth()
+        setUser(null)
+      })
       .finally(() => setLoading(false))
   }, [])
 

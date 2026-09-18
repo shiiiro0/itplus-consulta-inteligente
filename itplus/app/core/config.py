@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     ai_model: str = "llama-3.3-70b-versatile"
     ai_temperature: float = 0.15
     ai_max_tokens: int = 1536
+    # Sin esto, una llamada colgada al proveedor LLM podía agotar el pool de
+    # threads de toda la API bajo carga (el cliente OpenAI SDK no tiene
+    # timeout por defecto para requests que nunca responden).
+    ai_timeout_seconds: float = 60.0
 
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_dimensions: int = 384

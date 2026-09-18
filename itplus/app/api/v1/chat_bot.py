@@ -18,7 +18,7 @@ from itplus.app.schemas.chat_bot import (
     MessageResponse,
     SummaryResponse,
 )
-from itplus.app.services.conversation import ConversationService
+from itplus.app.services.conversation import ConversationService, LLMUnavailableError
 from itplus.app.services.summary import SummaryService
 
 router = APIRouter()
@@ -74,6 +74,8 @@ def send_message(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except LLMUnavailableError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
 
     return _turn_to_response(result)
 

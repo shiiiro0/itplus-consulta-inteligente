@@ -59,11 +59,15 @@ class SummaryService:
         try:
             summary_content = llm_provider.chat_completion(llm_messages, temperature=0.1)
         except Exception as exc:
+            # Antes esto se guardaba como un Summary "válido" con un mensaje
+            # de error dentro. El chequeo de "existing" de arriba lo trataba
+            # como ya generado para siempre, así que un fallo transitorio del
+            # LLM dejaba a la conversación sin resumen real para siempre, sin
+            # forma de reintentar. Ahora no persistimos nada: la próxima vez
+            # que se llame a generate_summary() para esta conversación, lo
+            # va a intentar de nuevo de verdad.
             logger.error("Summary generation failed for %s: %s", conversation_id, exc)
-            summary_content = (
-                "## Problema principal\nNo se pudo generar el resumen automáticamente.\n\n"
-                f"Error: {exc}"
-            )
+            return None
 
         summary = Summary(conversation_id=conversation_id, content=summary_content)
         self.db.add(summary)

@@ -6,6 +6,7 @@ import theme from './theme'
 import { AuthProvider } from './contexts/AuthContext'
 import { IrisTransitionProvider } from './components/IrisTransition'
 import ProtectedRoute from './components/ProtectedRoute'
+import ErrorBoundary from './components/ErrorBoundary'
 import LoginPage from './pages/LoginPage'
 import Layout from './components/Layout'
 
@@ -20,23 +21,25 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <BrowserRouter>
-          <AuthProvider>
-            <IrisTransitionProvider>
-              <Routes>
-                <Route path="/login" element={<LoginPage />} />
-                <Route
-                  path="*"
-                  element={(
-                    <ProtectedRoute>
-                      <Layout />
-                    </ProtectedRoute>
-                  )}
-                />
-              </Routes>
-            </IrisTransitionProvider>
-          </AuthProvider>
-        </BrowserRouter>
+        <ErrorBoundary>
+          <BrowserRouter>
+            <AuthProvider>
+              <IrisTransitionProvider>
+                <Routes>
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route
+                    path="*"
+                    element={(
+                      <ProtectedRoute>
+                        <Layout />
+                      </ProtectedRoute>
+                    )}
+                  />
+                </Routes>
+              </IrisTransitionProvider>
+            </AuthProvider>
+          </BrowserRouter>
+        </ErrorBoundary>
       </ThemeProvider>
     </QueryClientProvider>
   )

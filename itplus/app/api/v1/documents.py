@@ -1,6 +1,5 @@
 """Document upload and management endpoints."""
 
-import shutil
 import uuid
 from pathlib import Path
 
@@ -41,6 +40,32 @@ GENERIC_CONTENT_TYPES = {"application/octet-stream", ""}
 
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md", ".csv", ".xlsx", ".xlsm"}
 
+# Verificación básica de "magic bytes": no requiere una librería nueva
+# (python-magic necesita libmagic en el sistema, lo que complica el build de
+# Docker) pero sí detecta el caso más común de un archivo renombrado con una
+# extensión que no le corresponde (p. ej. un .exe subido como .pdf).
+# .docx/.xlsx/.xlsm son en realidad ZIPs (formato OOXML), por eso comparten
+# firma.
+_ZIP_SIGNATURES = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
+_BINARY_SIGNATURES: dict[str, tuple[bytes, ...]] = {
+    ".pdf": (b"%PDF-",),
+    ".docx": _ZIP_SIGNATURES,
+    ".xlsx": _ZIP_SIGNATURES,
+    ".xlsm": _ZIP_SIGNATURES,
+}
+# .txt/.md/.csv no tienen una firma binaria — solo rechazamos si el contenido
+# claramente no es texto (bytes nulos en los primeros KB, típico de binarios).
+_TEXT_EXTENSIONS = {".txt", ".md", ".csv"}
+
+
+def _content_matches_extension(content: bytes, suffix: str) -> bool:
+    signatures = _BINARY_SIGNATURES.get(suffix)
+    if signatures is not None:
+        return content.startswith(signatures)
+    if suffix in _TEXT_EXTENSIONS:
+        return b"\x00" not in content[:8192]
+    return True
+
 
 def _queue_indexing(document_id: uuid.UUID) -> None:
     try:
@@ -79,19 +104,43 @@ async def upload_document(
             detail=f"Formato no soportado. Usa: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
         )
 
-    content = await file.read()
+    # Validamos la categoría ANTES de tocar el disco — antes se escribía el
+    # archivo primero y se validaba la categoría después, así que una
+    # categoría inválida dejaba el archivo huérfano en upload_dir.
+    cat = (category or "general").strip().lower()
+    if cat not in ALLOWED_CATEGORIES:
+        raise HTTPException(status_code=400, detail=f"Categoría inválida. Usa: {', '.join(sorted(ALLOWED_CATEGORIES))}")
+
+    # Leemos en chunks respetando el límite en vez de file.read() completo:
+    # así no hay que cargar en memoria un archivo arbitrariamente grande solo
+    # para descubrir después que excede el máximo permitido.
     max_bytes = settings.max_upload_mb * 1024 * 1024
-    if len(content) > max_bytes:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Archivo excede el límite de {settings.max_upload_mb} MB",
-        )
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Archivo excede el límite de {settings.max_upload_mb} MB",
+            )
+        chunks.append(chunk)
+    content = b"".join(chunks)
 
     mime_type = file.content_type or "application/octet-stream"
     if mime_type not in ALLOWED_TYPES and mime_type not in GENERIC_CONTENT_TYPES:
         raise HTTPException(
             status_code=400,
             detail=f"Tipo de contenido no permitido: {mime_type}",
+        )
+
+    if not _content_matches_extension(content, suffix):
+        raise HTTPException(
+            status_code=400,
+            detail="El contenido del archivo no coincide con su extensión.",
         )
 
     doc_id = uuid.uuid4()
@@ -106,10 +155,6 @@ async def upload_document(
 
     with open(storage_path, "wb") as f:
         f.write(content)
-
-    cat = (category or "general").strip().lower()
-    if cat not in ALLOWED_CATEGORIES:
-        raise HTTPException(status_code=400, detail=f"Categoría inválida. Usa: {', '.join(sorted(ALLOWED_CATEGORIES))}")
 
     document = Document(
         id=doc_id,
@@ -155,6 +200,16 @@ def reindex_document(
     if not document:
         raise HTTPException(status_code=404, detail="Documento no encontrado")
 
+    if document.status in ("pending", "processing"):
+        # Evita el doble-clic / doble submit: sin este guard, dos reindexados
+        # concurrentes del mismo documento pueden dejar chunks duplicados
+        # (dos tareas insertando a la vez) o borrados a medias (una tarea
+        # borra los chunks justo cuando la otra ya insertó los suyos).
+        raise HTTPException(
+            status_code=409,
+            detail="El documento ya se está indexando. Espera a que termine.",
+        )
+
     document.status = "pending"
     document.error_message = None
     db.commit()
@@ -179,6 +234,18 @@ def delete_document(
     storage = Path(document.storage_path).resolve()
     if storage.parent == upload_dir and storage.exists():
         storage.unlink()
+
+    try:
+        from itplus.app.services.crisp_analyst.registry import cleanup_dataset_files
+
+        # El .duckdb (y el _import.csv temporal de un xlsx, si quedó de una
+        # corrida vieja) nunca se limpiaban al borrar el documento — fuga de
+        # disco silenciosa en cada borrado/reindexado de un dataset tabular.
+        cleanup_dataset_files(document.id)
+    except Exception:
+        # No queremos que un problema limpiando el dataset analítico impida
+        # borrar el documento en sí.
+        pass
 
     db.delete(document)
     db.commit()

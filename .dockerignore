@@ -1,0 +1,38 @@
+# Sin este archivo, el build de Docker (context: . en docker-compose.yml)
+# mandaba TODO el directorio raíz al daemon como contexto de build —
+# incluyendo .git/, uploads/ (con archivos de usuarios reales) y binarios
+# sueltos de varios GB que no tienen nada que ver con la app.
+.git
+.gitignore
+.gitattributes
+
+# Datos/artefactos que no deben viajar al build
+uploads/
+*.log
+logs/
+
+# Entornos / dependencias (cada Dockerfile instala lo suyo)
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+frontend/node_modules/
+frontend/dist/
+
+# Secretos y config local
+.env
+.env.*
+!.env.example
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Binarios sueltos que no son parte del proyecto (instaladores, etc.)
+*.exe
+
+# Docs que no aportan al runtime
+AUDITORIA.md
+readme.md

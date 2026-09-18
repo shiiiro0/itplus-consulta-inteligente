@@ -76,10 +76,15 @@ def register_document_dataset(db: Session, document: Document) -> DatasetProfile
             )
         else:
             csv_temp = _analyst_dir() / f"{document.id}_import.csv"
-            _xlsx_to_csv(path, csv_temp)
-            con.execute(
-                f"CREATE OR REPLACE TABLE raw_data AS SELECT * FROM read_csv_auto({_quote_ident(str(csv_temp))})"
-            )
+            try:
+                _xlsx_to_csv(path, csv_temp)
+                con.execute(
+                    f"CREATE OR REPLACE TABLE raw_data AS SELECT * FROM read_csv_auto({_quote_ident(str(csv_temp))})"
+                )
+            finally:
+                # Es un archivo intermedio solo para que DuckDB pueda leerlo;
+                # antes se quedaba en disco para siempre en cada reindexado.
+                csv_temp.unlink(missing_ok=True)
 
         columns = [row[0] for row in con.execute("DESCRIBE raw_data").fetchall()]
         if not columns:
@@ -220,6 +225,20 @@ def list_ready_datasets(db: Session, category: str | None = None) -> list[tuple[
         if profile and profile.row_count > 0:
             out.append((doc, profile))
     return out
+
+
+def cleanup_dataset_files(document_id: uuid.UUID) -> None:
+    """Remove the DuckDB dataset (and any leftover xlsx->csv temp file) for a document.
+
+    Debe llamarse al borrar un documento — antes estos archivos nunca se
+    limpiaban y quedaban ocupando disco indefinidamente en
+    ``upload_dir/analyst/``.
+    """
+    for path in (_duckdb_path(document_id), _analyst_dir() / f"{document_id}_import.csv"):
+        try:
+            path.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("No se pudo borrar %s: %s", path, exc)
 
 
 def connect_dataset(document_id: uuid.UUID) -> duckdb.DuckDBPyConnection:
