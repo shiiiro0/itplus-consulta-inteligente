@@ -156,14 +156,18 @@ class AssistantService:
         all_hits: list[ConnectorHit] = []
         sections: list[str] = []
 
+        n = 0
         for result in results:
             if not result.hits:
                 continue
-            for i, hit in enumerate(result.hits, 1):
+            for hit in result.hits:
+                n += 1
                 all_hits.append(hit)
                 page, sheet = parse_document_location(hit.metadata)
                 loc = format_document_location(page, sheet)
-                sections.append(f"[{i}] Documento: {hit.source_name}{loc}\n{hit.content}")
+                # No exponemos el nombre del archivo al LLM (el prompt prohíbe
+                # citar documentos); las fuentes reales van a la UI vía `sources`.
+                sections.append(f"[Evidencia {n}]{loc}\n{hit.content}")
 
         return "\n\n".join(sections), all_hits
 
@@ -281,11 +285,17 @@ class AssistantService:
                 crisp_steps=crisp_steps,
             )
 
-        context_parts = []
+        context_parts: list[str] = []
         if tabular_summary:
-            context_parts.append(tabular_summary)
+            context_parts.append(
+                "## CIFRAS OFICIALES (fuente de verdad — usa estas cifras si hay conflicto)\n"
+                f"{tabular_summary}"
+            )
         if context_block:
-            context_parts.append(context_block)
+            context_parts.append(
+                "## EVIDENCIA DE APOYO (solo para interpretar; no inventes cifras a partir de esto)\n"
+                f"{context_block}"
+            )
         full_context = "\n\n".join(context_parts)
 
         llm_messages: list[dict[str, str]] = [{"role": "system", "content": ASSISTANT_SYSTEM_PROMPT}]
@@ -295,7 +305,7 @@ class AssistantService:
             {
                 "role": "user",
                 "content": (
-                    f"Datos de los reportes:\n\n{full_context}\n\n"
+                    f"{full_context}\n\n"
                     f"Pregunta del gerente: {message}"
                 ),
             }
@@ -382,7 +392,7 @@ class AssistantService:
             answer = prepared.static_answer
         else:
             try:
-                answer = llm_provider.chat_completion(prepared.llm_messages or [], temperature=0.35)
+                answer = llm_provider.chat_completion(prepared.llm_messages or [], temperature=0.2)
             except Exception as exc:
                 logger.error("Assistant LLM failed: %s", exc)
                 answer = (
@@ -425,7 +435,7 @@ class AssistantService:
         try:
             for token in llm_provider.chat_completion_stream(
                 prepared.llm_messages or [],
-                temperature=0.35,
+                temperature=0.2,
             ):
                 full_parts.append(token)
                 yield {"type": "token", "content": token}

@@ -7,7 +7,13 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from itplus.app.schemas.analytics import AnalyticsPayload, ChartDataset, ChartSpec, TableSpec
+from itplus.app.schemas.analytics import (
+    AnalyticsPayload,
+    ChartDataset,
+    ChartSpec,
+    ComparisonSpec,
+    TableSpec,
+)
 from itplus.app.services.crisp_analyst.executor import execute_plan
 from itplus.app.services.crisp_analyst.models import CrispPipelineResult, CrispStep
 from itplus.app.services.crisp_analyst.planner import plan_query
@@ -45,6 +51,7 @@ def _model_step(intent: str) -> CrispStep:
         "by_category": "Desglose por categoría",
         "by_city": "Desglose por ciudad",
         "by_month": "Serie mensual",
+        "compare_quarters": "Comparativo trimestral",
         "compare_halves": "Comparativo semestral",
         "top_products": "Ranking de productos",
     }
@@ -109,8 +116,41 @@ def _build_analytics(plan, rows: list[dict[str, Any]], doc_name: str) -> Analyti
                 value_format="clp",
             )
         )
+    elif plan.intent in ("compare_quarters", "compare_halves") and len(rows) >= 2:
+        # Sin chart_type explícito (usuario no pidió gráfico), igual armamos
+        # una barra para que la UI tenga algo visual listo.
+        charts.append(
+            ChartSpec(
+                id=f"crisp_{plan.intent}",
+                chart_type="bar",
+                title=plan.chart_title or "Comparativo",
+                labels=labels,
+                datasets=[ChartDataset(label=plan.group_label or "Valor", values=values)],
+                value_format="clp",
+                optional=True,
+            )
+        )
 
-    top = max(rows, key=lambda r: float(r.get("value") or 0))
+    comparisons: list[ComparisonSpec] = []
+    if plan.intent in ("compare_quarters", "compare_halves") and len(rows) >= 2:
+        # Empareja los dos primeros periodos en orden (Q1→Q2, H1→H2).
+        a, b = rows[0], rows[1]
+        value_a = float(a.get("value") or 0)
+        value_b = float(b.get("value") or 0)
+        if value_a > 0:
+            change = (value_b - value_a) / value_a * 100
+            comparisons.append(
+                ComparisonSpec(
+                    label=plan.chart_title or "Comparativo",
+                    period_a=str(a.get("label", "")),
+                    period_b=str(b.get("label", "")),
+                    value_a=value_a,
+                    value_b=value_b,
+                    change_pct=round(change, 1),
+                    unit="clp",
+                )
+            )
+
     table_rows = [
         [str(r.get("label", "")), f"${float(r.get('value') or 0):,.0f}"]
         for r in rows[:12]
@@ -124,10 +164,10 @@ def _build_analytics(plan, rows: list[dict[str, Any]], doc_name: str) -> Analyti
         )
     ]
 
-    if not charts and not tables:
+    if not charts and not tables and not comparisons:
         return None
 
-    return AnalyticsPayload(charts=charts, tables=tables)
+    return AnalyticsPayload(charts=charts, tables=tables, comparisons=comparisons)
 
 
 def _build_llm_context(
@@ -154,6 +194,18 @@ def _build_llm_context(
 
     if plan.intent == "total_revenue" and rows:
         lines.append(f"TOTAL INGRESOS: {rows[0].get('value')}")
+    if plan.intent in ("compare_quarters", "compare_halves") and len(rows) >= 2:
+        a, b = rows[0], rows[1]
+        try:
+            va, vb = float(a.get("value") or 0), float(b.get("value") or 0)
+            if va > 0:
+                pct = (vb - va) / va * 100
+                lines.append(
+                    f"COMPARATIVO: {a.get('label')} {va:,.2f} → {b.get('label')} {vb:,.2f} "
+                    f"({pct:+.1f}%). Usa EXACTAMENTE estos periodos y esta variación."
+                )
+        except (TypeError, ValueError):
+            pass
     lines.append("Usa EXACTAMENTE estas cifras en tu respuesta gerencial.")
     return "\n".join(lines)
 

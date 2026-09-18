@@ -751,8 +751,8 @@ def build_analytics_context(payload: AnalyticsPayload | None, hits: list[Connect
                 )
 
     parts.append(
-        "Nota: responde de forma contundente al inicio y desarrolla en 3–4 párrafos con interpretación. "
-        "La tarjeta comparativa se muestra aparte; los gráficos solo si el gerente lo pide."
+        "Nota: abre con la conclusión o la cifra clave y desarrolla solo lo necesario para "
+        "interpretarla. La tarjeta comparativa se muestra aparte; los gráficos solo si el gerente lo pide."
     )
 
     return "\n\n".join(parts)

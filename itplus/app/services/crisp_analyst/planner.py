@@ -66,6 +66,39 @@ def _parse_month_range(question: str) -> tuple[int | None, int | None]:
     return None, None
 
 
+_QUARTER_RANGES: dict[str, tuple[int, int]] = {
+    "q1": (1, 3),
+    "q2": (4, 6),
+    "q3": (7, 9),
+    "q4": (10, 12),
+}
+
+_QUARTER_ALIASES: list[tuple[str, str]] = [
+    ("q1", "q1"),
+    ("1er trimestre", "q1"),
+    ("primer trimestre", "q1"),
+    ("q2", "q2"),
+    ("2do trimestre", "q2"),
+    ("segundo trimestre", "q2"),
+    ("q3", "q3"),
+    ("3er trimestre", "q3"),
+    ("tercer trimestre", "q3"),
+    ("q4", "q4"),
+    ("4to trimestre", "q4"),
+    ("cuarto trimestre", "q4"),
+]
+
+
+def _mentioned_quarters(question: str) -> list[str]:
+    """Return unique quarter keys (q1..q4) mentioned in the question, in order."""
+    q = question.lower()
+    found: list[str] = []
+    for alias, key in _QUARTER_ALIASES:
+        if alias in q and key not in found:
+            found.append(key)
+    return found
+
+
 def _date_filter_sql(profile: DatasetProfile, question: str) -> str:
     if not profile.date_column:
         return "1=1"
@@ -73,6 +106,7 @@ def _date_filter_sql(profile: DatasetProfile, question: str) -> str:
     clauses: list[str] = ["dt IS NOT NULL"]
     year = _parse_year(question)
     m_start, m_end = _parse_month_range(question)
+    quarters = _mentioned_quarters(question)
 
     if year:
         clauses.append(f"EXTRACT(YEAR FROM dt) = {year}")
@@ -84,21 +118,31 @@ def _date_filter_sql(profile: DatasetProfile, question: str) -> str:
             clauses.append(f"EXTRACT(MONTH FROM dt) BETWEEN {m_start} AND {m_end}")
 
     q = question.lower()
+    # Semestres: OR de todos los mencionados (antes if/elif dejaba solo H1
+    # cuando el usuario pedía "H1 contra H2").
+    half_clauses: list[str] = []
     if "h1" in q or "primer semestre" in q or "1er semestre" in q:
-        clauses.append("EXTRACT(MONTH FROM dt) BETWEEN 1 AND 6")
-    elif "h2" in q or "segundo semestre" in q or "2do semestre" in q:
-        clauses.append("EXTRACT(MONTH FROM dt) BETWEEN 7 AND 12")
+        half_clauses.append("EXTRACT(MONTH FROM dt) BETWEEN 1 AND 6")
+    if "h2" in q or "segundo semestre" in q or "2do semestre" in q:
+        half_clauses.append("EXTRACT(MONTH FROM dt) BETWEEN 7 AND 12")
+    # Solo aplicar filtro de semestre cuando NO hay trimestres explícitos.
+    if half_clauses and not quarters:
+        if len(half_clauses) == 1:
+            clauses.append(half_clauses[0])
+        else:
+            clauses.append("(" + " OR ".join(half_clauses) + ")")
 
-    if "q1" in q:
-        clauses.append("EXTRACT(MONTH FROM dt) BETWEEN 1 AND 3")
-    elif "q2" in q:
-        clauses.append("EXTRACT(MONTH FROM dt) BETWEEN 4 AND 6")
-    elif "q3" in q:
-        clauses.append("EXTRACT(MONTH FROM dt) BETWEEN 7 AND 9")
-    elif "q4" in q:
-        clauses.append("EXTRACT(MONTH FROM dt) BETWEEN 10 AND 12")
+    if quarters:
+        # Antes era if/elif: "Q1 contra Q2" se quedaba solo con Q1.
+        # Ahora OR de todos los trimestres mencionados.
+        or_parts = [
+            f"EXTRACT(MONTH FROM dt) BETWEEN {lo} AND {hi}"
+            for key in quarters
+            for lo, hi in [_QUARTER_RANGES[key]]
+        ]
+        clauses.append("(" + " OR ".join(or_parts) + ")")
 
-    if year is None and m_start is None:
+    if year is None and m_start is None and not quarters:
         if profile.date_min and profile.date_max:
             clauses.append(f"dt >= DATE '{profile.date_min}' AND dt <= DATE '{profile.date_max}'")
 
@@ -181,6 +225,35 @@ def plan_query(profile: DatasetProfile, question: str) -> QueryPlan:
             chart_type="line" if wants_chart else "bar",
             chart_title="Ingresos por mes",
             group_label="Mes",
+        )
+
+    # Comparativo entre trimestres (Q1 vs Q2, etc.) — ANTES de compare_halves,
+    # porque "comparame Q1 contra Q2" también matchea "compar" y antes caía
+    # siempre en el bucket semestral H1/H2.
+    quarters = _mentioned_quarters(question)
+    wants_compare = any(w in q for w in ("compar", "versus", "vs", "contra"))
+    if len(quarters) >= 2 or (wants_compare and len(quarters) >= 1):
+        # Si solo menciona un trimestre + "comparar", agrupa los 4; si menciona
+        # dos o más, el WHERE ya restringe a esos (vía _date_filter_sql).
+        return QueryPlan(
+            intent="compare_quarters",
+            sql=f"""
+                SELECT
+                    CASE
+                        WHEN EXTRACT(MONTH FROM dt) BETWEEN 1 AND 3 THEN 'Q1'
+                        WHEN EXTRACT(MONTH FROM dt) BETWEEN 4 AND 6 THEN 'Q2'
+                        WHEN EXTRACT(MONTH FROM dt) BETWEEN 7 AND 9 THEN 'Q3'
+                        ELSE 'Q4'
+                    END AS label,
+                    ROUND(SUM({rev}), 2) AS value
+                FROM data_clean
+                WHERE {where}
+                GROUP BY 1
+                ORDER BY 1
+            """,
+            chart_type="bar" if wants_chart else None,
+            chart_title="Comparativo trimestral",
+            group_label="Trimestre",
         )
 
     if any(w in q for w in ("compar", "versus", "vs", "h1", "h2", "semestre")):

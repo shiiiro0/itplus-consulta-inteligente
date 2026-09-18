@@ -28,12 +28,14 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://itplus:itplus@localhost:5432/consulta_db"
     redis_url: str = "redis://localhost:6379/0"
 
-    ai_driver: str = "groq"
-    ai_base_url: str = "https://api.groq.com/openai/v1"
+    ai_driver: str = "gemini"
+    ai_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     ai_api_key: str = ""
-    ai_model: str = "llama-3.3-70b-versatile"
+    ai_model: str = "gemini-3.6-flash"
     ai_temperature: float = 0.15
-    ai_max_tokens: int = 1536
+    # Gemini 3 Flash es un modelo "thinking": consume tokens razonando antes de
+    # responder, así que el presupuesto debe cubrir razonamiento + respuesta.
+    ai_max_tokens: int = 4096
     # Sin esto, una llamada colgada al proveedor LLM podía agotar el pool de
     # threads de toda la API bajo carga (el cliente OpenAI SDK no tiene
     # timeout por defecto para requests que nunca responden).
