@@ -203,11 +203,14 @@ export default function Layout() {
     () => !!(location.state as { fromLogin?: boolean } | null)?.fromLogin,
   )
 
-  const visibleNav = NAV_ITEMS.filter((item) => {
-    if (item.adminOnly && !isAdmin) return false
-    if (item.modulo === 'usuarios') return isAdmin
-    return can(item.modulo)
-  })
+  const visibleNav = useMemo(
+    () => NAV_ITEMS.filter((item) => {
+      if (item.adminOnly && !isAdmin) return false
+      if (item.modulo === 'usuarios') return isAdmin
+      return can(item.modulo)
+    }),
+    [isAdmin, can],
+  )
 
   const managementStart = visibleNav.findIndex((item) => item.path === '/documentos')
 
@@ -273,6 +276,10 @@ export default function Layout() {
     consulta: filteredHistory.filter((h) => h.chat_type === 'consulta'),
   }), [filteredHistory])
 
+  // Sincroniza el acordeón con la ruta/búsqueda, sin pelear al usuario:
+  // - Con búsqueda: abre los módulos con resultados.
+  // - Con chat abierto (?c=) o chat nuevo (?new=1): mantiene cerrado (no fuerza abrir).
+  // - En la ruta del módulo sin chat concreto: abre ese submenú.
   useEffect(() => {
     if (chatSearch.trim()) {
       const modulesWithResults = new Set(
@@ -286,13 +293,20 @@ export default function Layout() {
       }
       return
     }
+
+    const params = new URLSearchParams(activeSearch)
+    if (params.get('c') || params.get('new')) {
+      setExpandedMenus(new Set())
+      return
+    }
+
     const match = visibleNav.find(
       (item) => item.submenuId && activePathname.startsWith(item.path) && item.path !== '/',
     )
     if (match?.submenuId) {
       setExpandedMenus(new Set([match.submenuId]))
     }
-  }, [activePathname, chatSearch, visibleNav, chatsByType])
+  }, [activePathname, activeSearch, chatSearch, visibleNav, chatsByType])
 
   const activeChatId = new URLSearchParams(activeSearch).get('c')
 
@@ -330,10 +344,6 @@ export default function Layout() {
     return activePathname.startsWith(path)
   }
 
-  const openSubmenu = (submenuId: string) => {
-    setExpandedMenus(new Set([submenuId]))
-  }
-
   const toggleSubmenu = (submenuId: string) => {
     setExpandedMenus((prev) => {
       const next = new Set(prev)
@@ -354,8 +364,9 @@ export default function Layout() {
     }
   }
 
-  const openChat = (item: ChatHistoryItem, submenuId?: string) => {
-    if (submenuId) openSubmenu(submenuId)
+  const openChat = (item: ChatHistoryItem, _submenuId?: string) => {
+    // Al elegir un chat concreto, cerrar el acordeón para no dejar la lista abierta.
+    setExpandedMenus(new Set())
     goTo(chatPath(item), { keepSubmenus: true })
   }
 
@@ -365,16 +376,18 @@ export default function Layout() {
     e: React.MouseEvent,
   ) => {
     e.stopPropagation()
-    openSubmenu(submenuId)
     setPlusPulse(submenuId)
     window.setTimeout(() => setPlusPulse(null), 400)
+    // Chat nuevo: ir a la ruta y cerrar el listado.
+    setExpandedMenus(new Set())
     const path = NEW_CHAT_PATHS[chatType]
     if (path) goTo(path, { keepSubmenus: true })
   }
 
   const handleNavRowMain = (item: NavItem) => {
     if (!item.submenuId) return
-    openSubmenu(item.submenuId)
+    // Clic en el módulo: chat nuevo + acordeón cerrado.
+    setExpandedMenus(new Set())
     const path = NEW_CHAT_PATHS[item.chatType ?? '']
     goTo(path ?? item.path, { keepSubmenus: true })
   }
