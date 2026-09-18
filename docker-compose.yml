@@ -59,11 +59,14 @@ services:
     # arrancar (p. ej. Postgres tardó en aceptar conexiones) el contenedor
     # moría y se quedaba abajo para siempre — nadie lo reiniciaba.
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health', timeout=5)"]
+      # start_period generoso: seed_admin.py + init_db() + la primera carga
+      # del modelo de embeddings (que valida contra HuggingFace por red) se
+      # observó tardando hasta ~90s en un arranque en frío real.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=5)"]
       interval: 15s
       timeout: 5s
       retries: 5
-      start_period: 20s
+      start_period: 90s
     restart: unless-stopped
 
   worker:
@@ -100,7 +103,10 @@ services:
     depends_on:
       - api
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost/"]
+      # "localhost" resuelve primero a ::1 (IPv6) en este contenedor y nginx
+      # solo escucha en 0.0.0.0 — con "localhost" el healthcheck fallaba
+      # siempre con "connection refused" aunque nginx funcionara bien.
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
       interval: 15s
       timeout: 5s
       retries: 5
