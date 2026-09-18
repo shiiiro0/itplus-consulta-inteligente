@@ -72,3 +72,32 @@ CONVERSATION_START_RESPONSE = (
     "Acá recién empezamos: todavía no revisamos ningún indicador ni reporte. "
     "Dime qué quieres ver (ventas, Q1 vs Q2, un KPI o una proyección) y lo vemos."
 )
+
+IDENTITY_RESPONSE = (
+    "Soy el Asistente Gerencial de ITPlus: tu analista senior de datos. "
+    "Te ayudo con ventas, comparativos, KPIs y proyecciones sobre los reportes cargados. "
+    "¿Qué quieres revisar primero?"
+)
+
+OFF_TOPIC_RESPONSE = (
+    "Puedo charlar un poco, pero mi fuerte es el análisis de tus reportes de negocio. "
+    "Si quieres, miramos ventas, un comparativo Q1 vs Q2, un KPI o una proyección del próximo mes. "
+    "¿Por dónde empezamos?"
+)
+
+CAPABILITY_RESPONSE = (
+    "Sí se puede conversar — estoy enfocado en ayudarte con datos de negocio, no en temas generales. "
+    "Si una respuesta falló hace un momento, suele ser un límite temporal del modelo: espera un minuto "
+    "y prueba con algo concreto, por ejemplo: «ventas Q1 vs Q2» o «proyección del próximo mes»."
+)
+
+LLM_QUOTA_RESPONSE = (
+    "Ahora mismo el modelo de IA está al límite de cuota (plan gratuito). "
+    "Espera un minuto e inténtalo de nuevo con una pregunta concreta de negocio, "
+    "por ejemplo: «¿cómo van las ventas vs el trimestre anterior?»."
+)
+
+LLM_BUSY_RESPONSE = (
+    "No pude generar la respuesta con el modelo en este momento. "
+    "Intenta de nuevo en unos segundos; si quieres, reformula con un KPI o período concreto."
+)

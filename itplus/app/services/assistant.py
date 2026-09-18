@@ -17,9 +17,14 @@ from itplus.app.models.conversation import Conversation, Message
 from itplus.app.core.kpis import format_kpi_context, match_kpis
 from itplus.app.prompts.assistant import (
     ASSISTANT_SYSTEM_PROMPT,
+    CAPABILITY_RESPONSE,
     CONVERSATION_START_RESPONSE,
     GREETING_RESPONSE,
+    IDENTITY_RESPONSE,
+    LLM_BUSY_RESPONSE,
+    LLM_QUOTA_RESPONSE,
     NO_CONTEXT_RESPONSE,
+    OFF_TOPIC_RESPONSE,
 )
 from itplus.app.schemas.analytics import AnalyticsPayload
 from itplus.app.schemas.assistant import AssistantSource, ConnectorInfo
@@ -34,7 +39,14 @@ from itplus.app.services.document_analytics import (
 from itplus.app.services.crisp_analyst import run_crisp_pipeline
 from itplus.app.services.llm_provider import llm_provider
 from itplus.app.utils.document_location import format_document_location, parse_document_location
-from itplus.app.utils.small_talk import is_conversation_meta, is_small_talk
+from itplus.app.utils.small_talk import (
+    is_capability_or_frustration,
+    is_conversation_meta,
+    is_identity_question,
+    is_off_topic,
+    is_small_talk,
+    needs_static_chat_reply,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -214,6 +226,50 @@ class AssistantService:
                 history.append({"role": msg.role, "content": msg.content})
         return history[-12:]
 
+    def _static_chat_reply(self, message: str) -> str | None:
+        if is_identity_question(message):
+            return IDENTITY_RESPONSE
+        if is_capability_or_frustration(message):
+            return CAPABILITY_RESPONSE
+        if is_off_topic(message) or needs_static_chat_reply(message):
+            return OFF_TOPIC_RESPONSE
+        return None
+
+    def _thread_recap_answer(self, history: list[dict[str, str]]) -> str:
+        """Resumen determinista del hilo — sin LLM (ahorra cuota)."""
+        user_bits: list[str] = []
+        for turn in history:
+            if turn.get("role") != "user":
+                continue
+            content = (turn.get("content") or "").strip()
+            if not content:
+                continue
+            if is_small_talk(content) or is_conversation_meta(content):
+                continue
+            if needs_static_chat_reply(content):
+                continue
+            user_bits.append(content)
+        if not user_bits:
+            return CONVERSATION_START_RESPONSE
+        recent = user_bits[-3:]
+        if len(recent) == 1:
+            listed = f'"{recent[0]}"'
+        else:
+            listed = "; ".join(f'"{q}"' for q in recent)
+        return (
+            f"Hasta ahora en este chat pediste: {listed}. "
+            "¿Seguimos con eso o miramos otra cosa (comparativo, KPI o proyección)?"
+        )
+
+    def _llm_failure_answer(self, exc: Exception, analytics: AnalyticsPayload | None) -> str:
+        fallback = self._build_analytics_fallback_answer(analytics)
+        if fallback:
+            return fallback
+        msg = str(exc).lower()
+        if any(tok in msg for tok in ("429", "quota", "rate", "resource_exhausted")):
+            return LLM_QUOTA_RESPONSE
+        return LLM_BUSY_RESPONSE
+
     def _build_context_block(self, results: list[ConnectorResult]) -> tuple[str, list[ConnectorHit]]:
         all_hits: list[ConnectorHit] = []
         sections: list[str] = []
@@ -290,48 +346,29 @@ class AssistantService:
         prior_messages = self.get_messages(conversation.id)
         history = self._build_history(prior_messages)
 
-        # Meta del hilo ("¿en qué quedamos?"): responder solo con historial.
-        # Si solo hubo saludo / casi nada, respuesta fija; si hay sustancia, LLM sin reportes.
+        # Meta del hilo ("¿en qué quedamos?"): resumen determinista, sin LLM.
         if is_conversation_meta(message):
-            substantive = [
-                t
-                for t in history
-                if t.get("role") == "user"
-                and not is_small_talk(t.get("content") or "")
-                and not is_conversation_meta(t.get("content") or "")
-            ]
-            if not substantive:
-                return PreparedAssistantTurn(
-                    conversation=conversation,
-                    llm_messages=None,
-                    hits=[],
-                    connectors_used=[],
-                    sources=[],
-                    no_context=False,
-                    static_answer=CONVERSATION_START_RESPONSE,
-                )
-            llm_messages: list[dict[str, str]] = [
-                {
-                    "role": "system",
-                    "content": (
-                        ASSISTANT_SYSTEM_PROMPT
-                        + "\n\nEn este turno el gerente pregunta por el hilo del chat. "
-                        "Resume solo lo ya hablado aquí. No uses reportes ni inventes cifras "
-                        "que no se hayan mencionado en esta conversación. Cierra invitando "
-                        "a retomar el análisis."
-                    ),
-                }
-            ]
-            for turn in history[:-1]:
-                llm_messages.append(turn)
-            llm_messages.append({"role": "user", "content": message})
             return PreparedAssistantTurn(
                 conversation=conversation,
-                llm_messages=llm_messages,
+                llm_messages=None,
                 hits=[],
                 connectors_used=[],
                 sources=[],
                 no_context=False,
+                static_answer=self._thread_recap_answer(history),
+            )
+
+        # Chitchat / off-topic / frustracion: respuesta fija, sin quemar cuota.
+        static_chat = self._static_chat_reply(message)
+        if static_chat:
+            return PreparedAssistantTurn(
+                conversation=conversation,
+                llm_messages=None,
+                hits=[],
+                connectors_used=[],
+                sources=[],
+                no_context=False,
+                static_answer=static_chat,
             )
 
         retrieval_question = resolve_retrieval_question(message, history)
@@ -404,6 +441,18 @@ class AssistantService:
                     sources=sources,
                     no_context=False,
                     static_answer=GREETING_RESPONSE,
+                    crisp_steps=crisp_steps,
+                )
+            static_chat = self._static_chat_reply(message)
+            if static_chat:
+                return PreparedAssistantTurn(
+                    conversation=conversation,
+                    llm_messages=None,
+                    hits=hits,
+                    connectors_used=connectors_used,
+                    sources=[],
+                    no_context=False,
+                    static_answer=static_chat,
                     crisp_steps=crisp_steps,
                 )
             return PreparedAssistantTurn(
@@ -538,10 +587,7 @@ class AssistantService:
                 answer = llm_provider.chat_completion(prepared.llm_messages or [], temperature=0.2)
             except Exception as exc:
                 logger.error("Assistant LLM failed: %s", exc)
-                answer = (
-                    self._build_analytics_fallback_answer(prepared.analytics)
-                    or "No pude procesar la consulta en este momento. Intenta de nuevo."
-                )
+                answer = self._llm_failure_answer(exc, prepared.analytics)
 
         if not answer.strip():
             answer = NO_CONTEXT_RESPONSE
@@ -584,13 +630,10 @@ class AssistantService:
                 yield {"type": "token", "content": token}
         except Exception as exc:
             logger.error("Assistant stream failed: %s", exc)
-            fallback = (
-                self._build_analytics_fallback_answer(prepared.analytics)
-                or "No pude procesar la consulta en este momento. Intenta de nuevo."
-            )
+            fallback = self._llm_failure_answer(exc, prepared.analytics)
             if not full_parts:
                 yield {"type": "token", "content": fallback}
-            full_parts = full_parts or [fallback]
+                full_parts = [fallback]
 
         answer = "".join(full_parts).strip() or NO_CONTEXT_RESPONSE
         latency_ms = int((time.perf_counter() - start) * 1000)
