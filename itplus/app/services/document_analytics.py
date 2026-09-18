@@ -80,6 +80,99 @@ def resolve_retrieval_question(
     return q
 
 
+def infer_analysis_assumptions(question: str) -> list[str]:
+    """Declarable assumptions when the managerial question is underspecified.
+
+    Keeps the LLM honest without turning every turn into a questionnaire.
+    """
+    q = (question or "").lower().strip()
+    if not q:
+        return []
+
+    assumptions: list[str] = []
+
+    # Metric: "ventas" without units/margen → assume revenue in CLP.
+    salesy = any(w in q for w in ("venta", "vend", "ingreso", "factur", "revenue"))
+    metric_specified = any(
+        w in q
+        for w in (
+            "unidad",
+            "unidades",
+            "margen",
+            "ticket",
+            "cantidad",
+            "sku",
+            "neto",
+            "bruto",
+            "sin iva",
+            "con iva",
+        )
+    )
+    if salesy and not metric_specified:
+        assumptions.append(
+            "Métrica: ingresos (precio × cantidad) en CLP, no unidades ni margen."
+        )
+
+    # Period underspecified.
+    period_specified = any(
+        w in q
+        for w in (
+            "q1",
+            "q2",
+            "q3",
+            "q4",
+            "h1",
+            "h2",
+            "semestre",
+            "trimestre",
+            "mes",
+            "ayer",
+            "hoy",
+            "semana",
+            "yoy",
+            "interanual",
+            "202",
+            "ene",
+            "feb",
+            "mar",
+            "abr",
+            "may",
+            "jun",
+            "jul",
+            "ago",
+            "sep",
+            "oct",
+            "nov",
+            "dic",
+            "enero",
+            "febrero",
+            "marzo",
+            "abril",
+            "mayo",
+            "junio",
+            "julio",
+            "agosto",
+            "septiembre",
+            "octubre",
+            "noviembre",
+            "diciembre",
+        )
+    )
+    if salesy and not period_specified:
+        assumptions.append(
+            "Período: el rango disponible en los datos cargados (no un mes/trimestre específico)."
+        )
+
+    # Vague "cómo van" without comparison baseline.
+    if any(w in q for w in ("como van", "cómo van", "como andan", "cómo andan", "como vamos", "cómo vamos")):
+        if not any(w in q for w in ("compar", "vs", "versus", "contra", "respecto", "meta", "presupuesto")):
+            assumptions.append(
+                "Sin base de comparación explícita: se reporta el total/evolución del período disponible."
+            )
+
+    return assumptions
+
+
 def _parse_row_pairs(text: str) -> dict[str, str]:
     return {m.group(1).lower(): m.group(2).strip() for m in _PAIR_PATTERN.finditer(text)}
 

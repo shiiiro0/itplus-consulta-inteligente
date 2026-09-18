@@ -17,7 +17,14 @@ from itplus.app.models.conversation import Conversation, Message
 from itplus.app.prompts.assistant import ASSISTANT_SYSTEM_PROMPT, NO_CONTEXT_RESPONSE
 from itplus.app.schemas.analytics import AnalyticsPayload
 from itplus.app.schemas.assistant import AssistantSource, ConnectorInfo
-from itplus.app.services.document_analytics import build_analytics, build_analytics_context, resolve_retrieval_question, wants_analytics, _format_clp_short
+from itplus.app.services.document_analytics import (
+    build_analytics,
+    build_analytics_context,
+    infer_analysis_assumptions,
+    resolve_retrieval_question,
+    wants_analytics,
+    _format_clp_short,
+)
 from itplus.app.services.crisp_analyst import run_crisp_pipeline
 from itplus.app.services.llm_provider import llm_provider
 from itplus.app.utils.document_location import format_document_location, parse_document_location
@@ -286,6 +293,13 @@ class AssistantService:
             )
 
         context_parts: list[str] = []
+        assumptions = infer_analysis_assumptions(message)
+        if assumptions:
+            bullets = "\n".join(f"- {a}" for a in assumptions)
+            context_parts.append(
+                "## SUPUESTOS DECLARADOS (menciónalos brevemente; el gerente puede corregirlos)\n"
+                f"{bullets}"
+            )
         if tabular_summary:
             context_parts.append(
                 "## CIFRAS OFICIALES (fuente de verdad — usa estas cifras si hay conflicto)\n"

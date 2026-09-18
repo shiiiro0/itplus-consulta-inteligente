@@ -175,11 +175,26 @@ def _build_llm_context(
     steps: list[CrispStep],
     plan,
     rows: list[dict[str, Any]],
+    profile=None,
 ) -> str:
+    # No exponer el nombre de archivo al LLM (las fuentes van a la UI).
     lines = [
         "=== Análisis CRISP-DM (DuckDB — no inventar cifras) ===",
-        f"Dataset: {doc_name}",
+        "Dataset: tabular consolidado de la empresa",
     ]
+    if profile is not None:
+        coverage_bits: list[str] = []
+        if getattr(profile, "date_min", None) and getattr(profile, "date_max", None):
+            coverage_bits.append(f"cobertura {profile.date_min} → {profile.date_max}")
+        if getattr(profile, "row_count", None):
+            coverage_bits.append(f"{profile.row_count:,} filas".replace(",", "."))
+        if coverage_bits:
+            lines.append("COBERTURA DE DATOS: " + "; ".join(coverage_bits) + ".")
+            lines.append(
+                "LIMITACIÓN: el análisis solo cubre ese rango; no extrapoles fuera de él "
+                "ni asumas que representa toda la empresa si el dataset es de un canal."
+            )
+
     for s in steps:
         lines.append(f"· {s.label}: {s.detail}")
 
@@ -204,6 +219,14 @@ def _build_llm_context(
                     f"COMPARATIVO: {a.get('label')} {va:,.2f} → {b.get('label')} {vb:,.2f} "
                     f"({pct:+.1f}%). Usa EXACTAMENTE estos periodos y esta variación."
                 )
+                if abs(pct) >= 5:
+                    severity = "relevante" if abs(pct) >= 15 else "moderada"
+                    direction = "alza" if pct > 0 else "caída"
+                    lines.append(
+                        f"ANOMALÍA / SEÑAL ({severity}): {direction} de {abs(pct):.1f}% entre "
+                        f"{a.get('label')} y {b.get('label')}. Puedes señalarla una vez al gerente "
+                        "si aporta a la decisión; no satures."
+                    )
         except (TypeError, ValueError):
             pass
     lines.append("Usa EXACTAMENTE estas cifras en tu respuesta gerencial.")
@@ -272,7 +295,7 @@ def run_crisp_pipeline(
         return CrispPipelineResult(success=False, steps=steps)
 
     analytics = _build_analytics(plan, rows, doc.filename)
-    llm_context = _build_llm_context(doc.filename, steps, plan, rows)
+    llm_context = _build_llm_context(doc.filename, steps, plan, rows, profile=profile)
 
     steps.append(
         CrispStep(
