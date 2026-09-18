@@ -24,6 +24,7 @@ _ANALYTICS_HINTS = (
     "vendedor", "ventas", "vendimos", "vendió", "quiebre", "quiebres", "2024", "2025", "2026",
     "trimestre", "q1", "q2", "mes", "gráfico", "grafico", "distribución", "distribucion",
     "ingreso", "factur", "pedido", "categor", "ciudad", "producto",
+    "ticket", "kpi", "margen", "unidad", "unidades", "aov",
 )
 
 _FOLLOWUP_CHART_RE = re.compile(

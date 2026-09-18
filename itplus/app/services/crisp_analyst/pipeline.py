@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from itplus.app.core.kpis import format_kpi_context, match_kpis
 from itplus.app.schemas.analytics import (
     AnalyticsPayload,
     ChartDataset,
@@ -48,6 +49,8 @@ def _prepare_step() -> CrispStep:
 def _model_step(intent: str) -> CrispStep:
     labels = {
         "total_revenue": "Total de ingresos",
+        "ticket_average": "Ticket promedio",
+        "units_sold": "Unidades vendidas",
         "by_category": "Desglose por categoría",
         "by_city": "Desglose por ciudad",
         "by_month": "Serie mensual",
@@ -88,15 +91,22 @@ def _build_analytics(plan, rows: list[dict[str, Any]], doc_name: str) -> Analyti
     if not rows:
         return None
 
-    if plan.intent == "total_revenue" and len(rows) == 1:
+    if plan.intent in ("total_revenue", "ticket_average", "units_sold") and len(rows) == 1:
         val = float(rows[0].get("value") or 0)
+        metric_label = {
+            "total_revenue": "Ingresos totales",
+            "ticket_average": "Ticket promedio",
+            "units_sold": "Unidades vendidas",
+        }[plan.intent]
+        value_fmt = f"{val:,.0f}" if plan.intent == "units_sold" else f"${val:,.0f}"
+        col2 = "Unidades" if plan.intent == "units_sold" else "Valor (CLP)"
         return AnalyticsPayload(
             tables=[
                 TableSpec(
-                    id="crisp_total",
-                    title=f"Ingresos totales — {doc_name}",
-                    columns=["Métrica", "Valor (CLP)"],
-                    rows=[["Ingresos totales", f"${val:,.0f}"]],
+                    id=f"crisp_{plan.intent}",
+                    title=f"{metric_label} — {doc_name}",
+                    columns=["Métrica", col2],
+                    rows=[[metric_label, value_fmt]],
                 )
             ],
         )
@@ -176,12 +186,17 @@ def _build_llm_context(
     plan,
     rows: list[dict[str, Any]],
     profile=None,
+    question: str = "",
 ) -> str:
     # No exponer el nombre de archivo al LLM (las fuentes van a la UI).
     lines = [
         "=== Análisis CRISP-DM (DuckDB — no inventar cifras) ===",
         "Dataset: tabular consolidado de la empresa",
     ]
+    kpi_block = format_kpi_context(match_kpis(question))
+    if kpi_block:
+        lines.append(kpi_block)
+
     if profile is not None:
         coverage_bits: list[str] = []
         if getattr(profile, "date_min", None) and getattr(profile, "date_max", None):
@@ -207,8 +222,13 @@ def _build_llm_context(
             lines.append(f"  - {row.get('label')}: {row.get('value')}")
         lines.append(f"  … y {len(rows) - 15} filas más")
 
-    if plan.intent == "total_revenue" and rows:
-        lines.append(f"TOTAL INGRESOS: {rows[0].get('value')}")
+    if plan.intent in ("total_revenue", "ticket_average", "units_sold") and rows:
+        label = {
+            "total_revenue": "TOTAL INGRESOS",
+            "ticket_average": "TICKET PROMEDIO",
+            "units_sold": "UNIDADES VENDIDAS",
+        }[plan.intent]
+        lines.append(f"{label}: {rows[0].get('value')}")
     if plan.intent in ("compare_quarters", "compare_halves") and len(rows) >= 2:
         a, b = rows[0], rows[1]
         try:
@@ -295,7 +315,9 @@ def run_crisp_pipeline(
         return CrispPipelineResult(success=False, steps=steps)
 
     analytics = _build_analytics(plan, rows, doc.filename)
-    llm_context = _build_llm_context(doc.filename, steps, plan, rows, profile=profile)
+    llm_context = _build_llm_context(
+        doc.filename, steps, plan, rows, profile=profile, question=resolved
+    )
 
     steps.append(
         CrispStep(

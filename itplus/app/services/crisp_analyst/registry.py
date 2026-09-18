@@ -96,6 +96,7 @@ def register_document_dataset(db: Session, document: Document) -> DatasetProfile
         category_col = _detect_column(columns, "category")
         city_col = _detect_column(columns, "city")
         product_col = _detect_column(columns, "product")
+        order_col = _detect_column(columns, "order_id")
 
         revenue_parts: list[str] = []
         if qty_col and price_col:
@@ -142,6 +143,7 @@ def register_document_dataset(db: Session, document: Document) -> DatasetProfile
             category_column=category_col,
             city_column=city_col,
             product_column=product_col,
+            order_id_column=order_col,
             date_min=date_min,
             date_max=date_max,
             revenue_expression="revenue",
@@ -157,6 +159,7 @@ def register_document_dataset(db: Session, document: Document) -> DatasetProfile
             "category_column": category_col,
             "city_column": city_col,
             "product_column": product_col,
+            "order_id_column": order_col,
             "date_min": date_min,
             "date_max": date_max,
             "duckdb_path": str(duck_path),
@@ -206,6 +209,7 @@ def load_profile(document: Document) -> DatasetProfile | None:
         category_column=raw.get("category_column"),
         city_column=raw.get("city_column"),
         product_column=raw.get("product_column"),
+        order_id_column=raw.get("order_id_column"),
         date_min=raw.get("date_min"),
         date_max=raw.get("date_max"),
     )

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from itplus.app.connectors.base import ConnectorHit, ConnectorResult, QueryContext
 from itplus.app.connectors.registry import query_all
 from itplus.app.models.conversation import Conversation, Message
+from itplus.app.core.kpis import format_kpi_context, match_kpis
 from itplus.app.prompts.assistant import ASSISTANT_SYSTEM_PROMPT, NO_CONTEXT_RESPONSE
 from itplus.app.schemas.analytics import AnalyticsPayload
 from itplus.app.schemas.assistant import AssistantSource, ConnectorInfo
@@ -300,6 +301,10 @@ class AssistantService:
                 "## SUPUESTOS DECLARADOS (menciónalos brevemente; el gerente puede corregirlos)\n"
                 f"{bullets}"
             )
+        # Si CRISP ya inyectó el diccionario en tabular_summary, no duplicar.
+        kpi_block = format_kpi_context(match_kpis(message))
+        if kpi_block and (not tabular_summary or "DICCIONARIO KPI" not in tabular_summary):
+            context_parts.append(kpi_block)
         if tabular_summary:
             context_parts.append(
                 "## CIFRAS OFICIALES (fuente de verdad — usa estas cifras si hay conflicto)\n"

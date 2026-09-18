@@ -27,6 +27,7 @@ class DatasetProfile:
     category_column: str | None = None
     city_column: str | None = None
     product_column: str | None = None
+    order_id_column: str | None = None
     date_min: str | None = None
     date_max: str | None = None
     revenue_expression: str = "revenue"

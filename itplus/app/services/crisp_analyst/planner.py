@@ -273,6 +273,52 @@ def plan_query(profile: DatasetProfile, question: str) -> QueryPlan:
             group_label="Periodo",
         )
 
+    # KPIs explícitos (antes del total genérico).
+    if any(w in q for w in ("ticket", "aov", "average order")):
+        order_col = profile.order_id_column
+        if not order_col:
+            # Datasets registrados antes de order_id_column: intentar detectar en vivo.
+            for col in profile.columns:
+                n = col.strip().lower().replace(" ", "_")
+                if n in {"order_id", "orderid", "id_pedido", "pedido"} or "order" in n:
+                    order_col = col
+                    break
+        if order_col:
+            denom = f"COUNT(DISTINCT {_quote(order_col)})"
+            note = "por pedido distinto"
+        else:
+            denom = "COUNT(*)"
+            note = "proxy por fila (sin id de pedido)"
+        return QueryPlan(
+            intent="ticket_average",
+            sql=f"""
+                SELECT 'ticket_promedio' AS label,
+                       ROUND(SUM({rev}) / NULLIF({denom}, 0), 2) AS value
+                FROM data_clean
+                WHERE {where}
+            """,
+            chart_type=None,
+            chart_title=f"Ticket promedio ({note})",
+            group_label="KPI",
+        )
+
+    if profile.quantity_column and any(
+        w in q for w in ("unidad", "unidades", "qty", "volumen de unidades", "cantidad vend")
+    ):
+        qty = _quote(profile.quantity_column)
+        return QueryPlan(
+            intent="units_sold",
+            sql=f"""
+                SELECT 'unidades' AS label,
+                       ROUND(SUM(TRY_CAST({qty} AS DOUBLE)), 2) AS value
+                FROM data_clean
+                WHERE {where}
+            """,
+            chart_type=None,
+            chart_title="Unidades vendidas",
+            group_label="KPI",
+        )
+
     if profile.product_column and any(w in q for w in ("producto", "product", "top", "ranking")):
         col = _quote(profile.product_column)
         return QueryPlan(
