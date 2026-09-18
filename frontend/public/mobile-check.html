@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ITPlus — Diagnóstico móvil</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 0;
+        padding: 1.25rem;
+        background: #f3f6fb;
+        color: #16243a;
+        line-height: 1.5;
+      }
+      h1 {
+        font-size: 1.25rem;
+        margin: 0 0 1rem;
+      }
+      .card {
+        background: #fff;
+        border: 1px solid #e3e8f1;
+        border-radius: 12px;
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+      }
+      .ok {
+        color: #2fbf8f;
+        font-weight: 600;
+      }
+      .fail {
+        color: #ff6a5f;
+        font-weight: 600;
+      }
+      .pending {
+        color: #647089;
+      }
+      code {
+        font-size: 0.85rem;
+        word-break: break-all;
+      }
+      a {
+        color: #3b7dd8;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Diagnóstico ITPlus</h1>
+    <div class="card" id="ua" class="pending">Detectando navegador…</div>
+    <div class="card pending" id="health">API health…</div>
+    <div class="card pending" id="js">Bundle JavaScript…</div>
+    <p><a href="/login">Volver a /login</a></p>
+    <script>
+      document.getElementById('ua').textContent = navigator.userAgent
+
+      function setResult(id, ok, html) {
+        var el = document.getElementById(id)
+        el.className = 'card ' + (ok ? 'ok' : 'fail')
+        el.innerHTML = html
+      }
+
+      fetch('/api/v1/health')
+        .then(function (r) {
+          return r.json().then(function (j) {
+            setResult('health', r.ok, 'API: ' + JSON.stringify(j))
+          })
+        })
+        .catch(function (e) {
+          setResult('health', false, 'API: falló — ' + e.message)
+        })
+
+      fetch('/')
+        .then(function (r) {
+          return r.text()
+        })
+        .then(function (html) {
+          var m = html.match(/src="(\/assets\/index-[^"]+\.js)"/)
+          if (!m) {
+            setResult('js', false, 'No se encontró el script principal en index.html')
+            return
+          }
+          var url = m[1]
+          return fetch(url).then(function (r) {
+            return r.blob().then(function (blob) {
+              var kb = Math.round(blob.size / 1024)
+              setResult(
+                'js',
+                r.ok && blob.size > 10000,
+                'JS <code>' +
+                  url +
+                  '</code>: ' +
+                  (r.ok ? kb + ' KB descargados' : 'HTTP ' + r.status),
+              )
+            })
+          })
+        })
+        .catch(function (e) {
+          setResult('js', false, 'JS: falló — ' + e.message)
+        })
+    </script>
+  </body>
+</html>
