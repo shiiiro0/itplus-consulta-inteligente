@@ -58,3 +58,9 @@ NO_CONTEXT_RESPONSE = (
     "Si subes el documento correspondiente en la sección Documentos y queda en estado Listo, "
     "puedo ayudarte enseguida."
 )
+
+GREETING_RESPONSE = (
+    "¡Hola! Soy tu analista senior de datos de ITPlus. "
+    "Puedo ayudarte con ventas, comparativos, KPIs y proyecciones sobre tus reportes. "
+    "¿Qué quieres revisar?"
+)

@@ -12,9 +12,19 @@ _SMALL_TALK = re.compile(
     re.IGNORECASE,
 )
 
+# Meta-mensajes sobre el saludo / que el bot no entendió el hola.
+_GREETING_META = re.compile(
+    r"(te\s+salud|solo\s+(te\s+)?salud|era\s+un\s+saludo|solamente\s+salud|"
+    r"nada\s+m[aá]s|solo\s+dije\s+hola)",
+    re.IGNORECASE,
+)
+
 
 def is_small_talk(message: str) -> bool:
     text = (message or "").strip()
-    if not text or len(text) > 80:
+    if not text or len(text) > 120:
         return False
-    return bool(_SMALL_TALK.match(text))
+    if _SMALL_TALK.match(text):
+        return True
+    # "pero te salude solamente" / "solo dije hola"
+    return bool(_GREETING_META.search(text)) and len(text) <= 120

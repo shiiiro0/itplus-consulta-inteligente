@@ -15,7 +15,11 @@ from itplus.app.connectors.base import ConnectorHit, ConnectorResult, QueryConte
 from itplus.app.connectors.registry import query_all
 from itplus.app.models.conversation import Conversation, Message
 from itplus.app.core.kpis import format_kpi_context, match_kpis
-from itplus.app.prompts.assistant import ASSISTANT_SYSTEM_PROMPT, NO_CONTEXT_RESPONSE
+from itplus.app.prompts.assistant import (
+    ASSISTANT_SYSTEM_PROMPT,
+    GREETING_RESPONSE,
+    NO_CONTEXT_RESPONSE,
+)
 from itplus.app.schemas.analytics import AnalyticsPayload
 from itplus.app.schemas.assistant import AssistantSource, ConnectorInfo
 from itplus.app.services.document_analytics import (
@@ -29,6 +33,7 @@ from itplus.app.services.document_analytics import (
 from itplus.app.services.crisp_analyst import run_crisp_pipeline
 from itplus.app.services.llm_provider import llm_provider
 from itplus.app.utils.document_location import format_document_location, parse_document_location
+from itplus.app.utils.small_talk import is_small_talk
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +104,20 @@ class AssistantService:
             if analytics.charts:
                 parts.append("Si quieres, te muestro la serie histórica con el punto proyectado en gráficos.")
             return "\n\n".join(parts)
+
+        # Totales / KPIs de una sola métrica (ingresos, ticket, unidades).
+        for table in analytics.tables:
+            if table.id.startswith("crisp_") and table.rows and len(table.rows[0]) >= 2:
+                metric, value = str(table.rows[0][0]), str(table.rows[0][1])
+                if any(
+                    k in table.id
+                    for k in ("total", "ticket", "units", "revenue")
+                ) or "ingresos" in metric.lower() or "ticket" in metric.lower() or "unidad" in metric.lower():
+                    parts.append(f"Sí: {metric} = {value} en el período disponible de los reportes cargados.")
+                    parts.append(
+                        "Si quieres, te muestro el desglose por mes, categoría o un comparativo Q1 vs Q2."
+                    )
+                    return "\n\n".join(parts)
 
         if analytics.comparisons:
             comparison = analytics.comparisons[0]
@@ -254,6 +273,19 @@ class AssistantService:
             conversation.title = _title_from_message(message)
         self.db.flush()
 
+        # Saludos: respuesta fija, sin retrieval ni LLM (evita "no hay documentos"
+        # y no gasta cuota de Gemini).
+        if is_small_talk(message):
+            return PreparedAssistantTurn(
+                conversation=conversation,
+                llm_messages=None,
+                hits=[],
+                connectors_used=[],
+                sources=[],
+                no_context=False,
+                static_answer=GREETING_RESPONSE,
+            )
+
         prior_messages = self.get_messages(conversation.id)
         history = self._build_history(prior_messages)
         retrieval_question = resolve_retrieval_question(message, history)
@@ -316,6 +348,18 @@ class AssistantService:
         sources = self._hits_to_sources(hits)
 
         if not hits and not crisp_context:
+            # Saludos / small-talk no deben caer en "no hay documentos".
+            if is_small_talk(message):
+                return PreparedAssistantTurn(
+                    conversation=conversation,
+                    llm_messages=None,
+                    hits=hits,
+                    connectors_used=connectors_used,
+                    sources=sources,
+                    no_context=False,
+                    static_answer=GREETING_RESPONSE,
+                    crisp_steps=crisp_steps,
+                )
             return PreparedAssistantTurn(
                 conversation=conversation,
                 llm_messages=None,
