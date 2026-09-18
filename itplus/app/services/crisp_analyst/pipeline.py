@@ -16,6 +16,7 @@ from itplus.app.schemas.analytics import (
     TableSpec,
 )
 from itplus.app.services.crisp_analyst.executor import execute_plan
+from itplus.app.services.crisp_analyst.forecast import ForecastResult, build_revenue_forecast
 from itplus.app.services.crisp_analyst.models import CrispPipelineResult, CrispStep
 from itplus.app.services.crisp_analyst.planner import plan_query
 from itplus.app.services.crisp_analyst.profiler import profile_step, select_best_dataset
@@ -54,6 +55,7 @@ def _model_step(intent: str) -> CrispStep:
         "by_category": "Desglose por categoría",
         "by_city": "Desglose por ciudad",
         "by_month": "Serie mensual",
+        "forecast_revenue": "Proyección de ingresos (próximo mes)",
         "compare_quarters": "Comparativo trimestral",
         "compare_halves": "Comparativo semestral",
         "top_products": "Ranking de productos",
@@ -87,7 +89,12 @@ def _evaluate_step(rows: list[dict[str, Any]]) -> CrispStep:
     )
 
 
-def _build_analytics(plan, rows: list[dict[str, Any]], doc_name: str) -> AnalyticsPayload | None:
+def _build_analytics(
+    plan,
+    rows: list[dict[str, Any]],
+    doc_name: str,
+    forecast: ForecastResult | None = None,
+) -> AnalyticsPayload | None:
     if not rows:
         return None
 
@@ -115,7 +122,23 @@ def _build_analytics(plan, rows: list[dict[str, Any]], doc_name: str) -> Analyti
     values = [float(r.get("value") or 0) for r in rows]
 
     charts: list[ChartSpec] = []
-    if plan.chart_type and labels:
+    if plan.intent == "forecast_revenue" and forecast is not None:
+        hist_labels = [str(r["label"]) for r in forecast.rows if r.get("kind") == "historico"]
+        hist_values = [float(r["value"]) for r in forecast.rows if r.get("kind") == "historico"]
+        # Serie histórica + punto de proyección (último valor = forecast).
+        chart_labels = hist_labels + [forecast.horizon_label]
+        chart_values = hist_values + [forecast.point_forecast]
+        charts.append(
+            ChartSpec(
+                id="crisp_forecast_revenue",
+                chart_type="line",
+                title=plan.chart_title or "Proyección de ingresos",
+                labels=chart_labels,
+                datasets=[ChartDataset(label="Ingresos (CLP)", values=chart_values)],
+                value_format="clp",
+            )
+        )
+    elif plan.chart_type and labels:
         charts.append(
             ChartSpec(
                 id=f"crisp_{plan.intent}",
@@ -127,8 +150,6 @@ def _build_analytics(plan, rows: list[dict[str, Any]], doc_name: str) -> Analyti
             )
         )
     elif plan.intent in ("compare_quarters", "compare_halves") and len(rows) >= 2:
-        # Sin chart_type explícito (usuario no pidió gráfico), igual armamos
-        # una barra para que la UI tenga algo visual listo.
         charts.append(
             ChartSpec(
                 id=f"crisp_{plan.intent}",
@@ -143,7 +164,6 @@ def _build_analytics(plan, rows: list[dict[str, Any]], doc_name: str) -> Analyti
 
     comparisons: list[ComparisonSpec] = []
     if plan.intent in ("compare_quarters", "compare_halves") and len(rows) >= 2:
-        # Empareja los dos primeros periodos en orden (Q1→Q2, H1→H2).
         a, b = rows[0], rows[1]
         value_a = float(a.get("value") or 0)
         value_b = float(b.get("value") or 0)
@@ -160,6 +180,40 @@ def _build_analytics(plan, rows: list[dict[str, Any]], doc_name: str) -> Analyti
                     unit="clp",
                 )
             )
+
+    if plan.intent == "forecast_revenue" and forecast is not None:
+        table_rows = [
+            [
+                str(r.get("label", "")),
+                "Histórico" if r.get("kind") == "historico" else "Proyección",
+                f"${float(r.get('value') or 0):,.0f}",
+            ]
+            for r in forecast.rows
+        ]
+        tables = [
+            TableSpec(
+                id="crisp_forecast_table",
+                title="Serie mensual + proyección",
+                columns=["Mes", "Tipo", "Ingreso (CLP)"],
+                rows=table_rows,
+            ),
+            TableSpec(
+                id="crisp_forecast_summary",
+                title=f"Proyección {forecast.horizon_label}",
+                columns=["Concepto", "Valor"],
+                rows=[
+                    ["Punto estimado", f"${forecast.point_forecast:,.0f}"],
+                    ["Banda baja", f"${forecast.low:,.0f}"],
+                    ["Banda alta", f"${forecast.high:,.0f}"],
+                    ["Método", forecast.method_label],
+                    [
+                        "MAPE backtest",
+                        f"{forecast.mape_pct:.1f}%" if forecast.mape_pct is not None else "N/D (serie corta)",
+                    ],
+                ],
+            ),
+        ]
+        return AnalyticsPayload(charts=charts, tables=tables, comparisons=comparisons)
 
     table_rows = [
         [str(r.get("label", "")), f"${float(r.get('value') or 0):,.0f}"]
@@ -187,6 +241,7 @@ def _build_llm_context(
     rows: list[dict[str, Any]],
     profile=None,
     question: str = "",
+    forecast: ForecastResult | None = None,
 ) -> str:
     # No exponer el nombre de archivo al LLM (las fuentes van a la UI).
     lines = [
@@ -214,7 +269,30 @@ def _build_llm_context(
         lines.append(f"· {s.label}: {s.detail}")
 
     lines.append(f"Consulta ({plan.intent}):")
-    if len(rows) <= 20:
+    if plan.intent == "forecast_revenue" and forecast is not None:
+        for row in forecast.rows:
+            kind = "histórico" if row.get("kind") == "historico" else "PROYECCIÓN"
+            lines.append(f"  - [{kind}] {row.get('label')}: {row.get('value')}")
+        lines.append(
+            f"PROYECCIÓN PUNTO ({forecast.horizon_label}): {forecast.point_forecast} CLP"
+        )
+        lines.append(
+            f"BANDA DE INCERTIDUMBRE: {forecast.low} – {forecast.high} CLP"
+        )
+        lines.append(f"MÉTODO: {forecast.method_label}")
+        if forecast.mape_pct is not None:
+            lines.append(f"ERROR HISTÓRICO (MAPE backtest 1 paso): {forecast.mape_pct}%")
+        lines.append("SUPUESTOS:")
+        for a in forecast.assumptions:
+            lines.append(f"  · {a}")
+        lines.append("LIMITACIONES:")
+        for lim in forecast.limitations:
+            lines.append(f"  · {lim}")
+        lines.append(
+            "En la respuesta: da primero el punto estimado + banda, declara el método en una frase, "
+            "y deja claro que es proyección (no hecho). No presentes la proyección como certeza."
+        )
+    elif len(rows) <= 20:
         for row in rows:
             lines.append(f"  - {row.get('label')}: {row.get('value')}")
     else:
@@ -314,9 +392,36 @@ def run_crisp_pipeline(
     if not rows or all(r.get("value") in (None, 0) for r in rows):
         return CrispPipelineResult(success=False, steps=steps)
 
-    analytics = _build_analytics(plan, rows, doc.filename)
+    forecast: ForecastResult | None = None
+    if plan.intent == "forecast_revenue":
+        forecast = build_revenue_forecast(rows)
+        if forecast is None:
+            steps.append(
+                CrispStep(
+                    phase="evaluation",
+                    label="Evaluación",
+                    detail="Serie mensual insuficiente (<3 meses) para proyectar",
+                )
+            )
+            return CrispPipelineResult(success=False, steps=steps)
+        rows = forecast.rows
+        steps.append(
+            CrispStep(
+                phase="modeling",
+                label="Proyección",
+                detail=f"{forecast.method_label} → {forecast.horizon_label}",
+            )
+        )
+
+    analytics = _build_analytics(plan, rows, doc.filename, forecast=forecast)
     llm_context = _build_llm_context(
-        doc.filename, steps, plan, rows, profile=profile, question=resolved
+        doc.filename,
+        steps,
+        plan,
+        rows,
+        profile=profile,
+        question=resolved,
+        forecast=forecast,
     )
 
     steps.append(

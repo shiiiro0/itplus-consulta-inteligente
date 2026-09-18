@@ -66,6 +66,40 @@ class AssistantService:
             return None
 
         parts: list[str] = []
+
+        # Preferir narrar una proyección si el payload la trae (útil cuando el LLM
+        # está en rate-limit y CRISP igual calculó el número).
+        forecast_summary = next(
+            (t for t in analytics.tables if t.id == "crisp_forecast_summary"),
+            None,
+        )
+        if forecast_summary and forecast_summary.rows:
+            kv = {str(r[0]): str(r[1]) for r in forecast_summary.rows if len(r) >= 2}
+            point = kv.get("Punto estimado", "")
+            low = kv.get("Banda baja", "")
+            high = kv.get("Banda alta", "")
+            method = kv.get("Método", "método estadístico simple")
+            mape = kv.get("MAPE backtest", "")
+            title_horizon = forecast_summary.title.replace("Proyección ", "").strip()
+            parts.append(
+                f"La proyección de ingresos para {title_horizon} es {point} CLP "
+                f"(banda {low} – {high})."
+            )
+            detail = f"Se estimó con {method}"
+            if mape and mape != "N/D (serie corta)":
+                detail += f"; el error histórico aproximado (MAPE) fue {mape}"
+            detail += (
+                ". Es una proyección a 1 mes, no un hecho: no incorpora campañas futuras "
+                "ni cambios de precio no observados."
+            )
+            parts.append(detail)
+            parts.append(
+                "Conviene contrastarla con el plan comercial del mes antes de fijar metas."
+            )
+            if analytics.charts:
+                parts.append("Si quieres, te muestro la serie histórica con el punto proyectado en gráficos.")
+            return "\n\n".join(parts)
+
         if analytics.comparisons:
             comparison = analytics.comparisons[0]
             direction = "subieron" if comparison.change_pct >= 0 else "bajaron"

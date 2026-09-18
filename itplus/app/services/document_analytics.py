@@ -25,6 +25,7 @@ _ANALYTICS_HINTS = (
     "trimestre", "q1", "q2", "mes", "gráfico", "grafico", "distribución", "distribucion",
     "ingreso", "factur", "pedido", "categor", "ciudad", "producto",
     "ticket", "kpi", "margen", "unidad", "unidades", "aov",
+    "proyecc", "predic", "forecast", "pronostic", "proyect", "estimacion", "estimación",
 )
 
 _FOLLOWUP_CHART_RE = re.compile(

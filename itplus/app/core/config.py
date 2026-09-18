@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     ai_driver: str = "gemini"
     ai_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     ai_api_key: str = ""
-    ai_model: str = "gemini-3.6-flash"
+    ai_model: str = "gemini-2.5-flash"
     ai_temperature: float = 0.15
     # Gemini 3 Flash es un modelo "thinking": consume tokens razonando antes de
     # responder, así que el presupuesto debe cubrir razonamiento + respuesta.

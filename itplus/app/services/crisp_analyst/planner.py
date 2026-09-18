@@ -211,6 +211,36 @@ def plan_query(profile: DatasetProfile, question: str) -> QueryPlan:
         )
 
     if profile.date_column and any(
+        w in q
+        for w in (
+            "proyecc",
+            "predic",
+            "forecast",
+            "pronostic",
+            "proyect",
+            "proximo mes",
+            "próximo mes",
+            "siguiente mes",
+            "mes que viene",
+            "estimacion",
+            "estimación",
+        )
+    ):
+        return QueryPlan(
+            intent="forecast_revenue",
+            sql=f"""
+                SELECT month_key AS label, ROUND(SUM({rev}), 2) AS value
+                FROM data_clean
+                WHERE {where} AND month_key IS NOT NULL
+                GROUP BY 1
+                ORDER BY 1
+            """,
+            chart_type="line",
+            chart_title="Ingresos históricos + proyección próximo mes",
+            group_label="Mes",
+        )
+
+    if profile.date_column and any(
         w in q for w in ("mes", "mensual", "month", "tendencia", "evolución", "evolucion", "linea", "línea")
     ):
         return QueryPlan(
