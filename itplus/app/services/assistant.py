@@ -17,6 +17,7 @@ from itplus.app.models.conversation import Conversation, Message
 from itplus.app.core.kpis import format_kpi_context, match_kpis
 from itplus.app.prompts.assistant import (
     ASSISTANT_SYSTEM_PROMPT,
+    CONVERSATION_START_RESPONSE,
     GREETING_RESPONSE,
     NO_CONTEXT_RESPONSE,
 )
@@ -33,7 +34,7 @@ from itplus.app.services.document_analytics import (
 from itplus.app.services.crisp_analyst import run_crisp_pipeline
 from itplus.app.services.llm_provider import llm_provider
 from itplus.app.utils.document_location import format_document_location, parse_document_location
-from itplus.app.utils.small_talk import is_small_talk
+from itplus.app.utils.small_talk import is_conversation_meta, is_small_talk
 
 logger = logging.getLogger(__name__)
 
@@ -288,6 +289,51 @@ class AssistantService:
 
         prior_messages = self.get_messages(conversation.id)
         history = self._build_history(prior_messages)
+
+        # Meta del hilo ("¿en qué quedamos?"): responder solo con historial.
+        # Si solo hubo saludo / casi nada, respuesta fija; si hay sustancia, LLM sin reportes.
+        if is_conversation_meta(message):
+            substantive = [
+                t
+                for t in history
+                if t.get("role") == "user"
+                and not is_small_talk(t.get("content") or "")
+                and not is_conversation_meta(t.get("content") or "")
+            ]
+            if not substantive:
+                return PreparedAssistantTurn(
+                    conversation=conversation,
+                    llm_messages=None,
+                    hits=[],
+                    connectors_used=[],
+                    sources=[],
+                    no_context=False,
+                    static_answer=CONVERSATION_START_RESPONSE,
+                )
+            llm_messages: list[dict[str, str]] = [
+                {
+                    "role": "system",
+                    "content": (
+                        ASSISTANT_SYSTEM_PROMPT
+                        + "\n\nEn este turno el gerente pregunta por el hilo del chat. "
+                        "Resume solo lo ya hablado aquí. No uses reportes ni inventes cifras "
+                        "que no se hayan mencionado en esta conversación. Cierra invitando "
+                        "a retomar el análisis."
+                    ),
+                }
+            ]
+            for turn in history[:-1]:
+                llm_messages.append(turn)
+            llm_messages.append({"role": "user", "content": message})
+            return PreparedAssistantTurn(
+                conversation=conversation,
+                llm_messages=llm_messages,
+                hits=[],
+                connectors_used=[],
+                sources=[],
+                no_context=False,
+            )
+
         retrieval_question = resolve_retrieval_question(message, history)
 
         ctx = QueryContext(
